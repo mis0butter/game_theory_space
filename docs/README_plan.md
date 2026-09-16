@@ -1,18 +1,42 @@
 # AAMAS 2027 submission — handoff plan
 
+> **ARCHIVED 2026-09-16.** Superseded by the three-file structure: `CLAUDE.md` (current state
+> + operational context), `LOG.md` (decision record), `README.md` (research narrative). Kept
+> in place as provenance — notes [a]–[k] are the primary record behind every number quoted in
+> those files. Do not update this file further.
+
 **This document is written to be handed to an agent on a different machine.** It assumes no prior context about this repository.
 
 ---
 
-## Status — Aug 31 2026
+## Status — Sep 2 2026
 
-**GATE A IS COMPLETE — all 10 items, finished Aug 31, six days ahead of the Sep 6 gate.**
-Per-defect detail is in the §3 `Status` column and the notes after it. Nine defects fixed
-(D1, D4, D5, D6-plumbing, D7, D8, D9, D10, D11), one retired as not-a-defect (D3), three
-still open (D2 → Gate B, D12 deferred, D13 a modeling decision).
+**GATE A IS COMPLETE** — all 10 items, finished Aug 31, six days ahead of the Sep 6 gate.
 
-**Next: Gate B, starting with B1 (real Monte Carlo / D2).** Read the cost warning in note [i]
-first — a full 5×5 re-run now projects to ~2.5 h, not the ~36 min assumed earlier.
+**GATE B DATA IS COMPLETE, AND SO IS ITS ANALYSIS.** The full 5×5 × 100 trials × 30 steps
+sweep was run twice — Sep 1 (106.4 min) and again Sep 2 under **common random numbers**
+(106.2 min, 32 threads), with dispersed ICs, separation-only payoff, LBFGS, and slim save.
+B1, B2, B4 and B5 are done and D2 is fixed; B3 is done except for choosing a capture radius,
+which blocks B6. **All Gate B numbers are in note [k].**
+
+**The headline holds and is sharper than §9 risk 1 predicted.** `FP_greedy` is the best evader
+*and* the best pursuer, and the `FP_greedy − mixed` advantage **reverses sign** against an
+`FP_greedy` pursuer (−0.254 ± 0.051 km, t = −9.81): exploiting an exploiter is worse than
+playing safe.
+
+Per-defect detail is in the §3 `Status` column and the notes after it. Eleven defects fixed
+(D1, D2, D4, D5, D6-plumbing, D7, D8, D9, D10, D11, D14), one retired as not-a-defect (D3),
+two still open (D12 deferred, D13 a modeling decision).
+
+**Next: B3's capture condition and B6 (oracle best-response).** The capture *curve* exists
+(note [k]) but there is still no capture or termination condition in the code, and B6 is
+blocked on picking a radius.
+
+**Decision taken, closing note [j]:** option 3 — **the payoff is separation-only, `λ2 = 0`**,
+and ΔV is reported as a separate metric. The fuel term contributed 0.0000 of the 6×6 matrix's
+range, so leaving it in at `λ2 = 0.1` would have meant describing a term that changes nothing.
+Raising `λ2` was rejected as it would have re-opened every Gate A measurement days before the
+narrative locks.
 
 **Landed (all verified value-preserving except where a fix is the point):**
 
@@ -134,7 +158,7 @@ D1–D9 are the original audit. **D10–D13 were found on Aug 31** while executi
 | # | Defect | Location | Consequence | Status |
 |---|---|---|---|---|
 | D1 | **LP sign inversion.** `solve_mixed_security_strategy` returns the row player's *minimizing* security strategy. `solve_mixed_nash(A)` therefore gives the evader a distance-minimizing mixed strategy and the pursuer a distance-maximizing one — both reversed. Verified numerically on a matrix with a known saddle point: the evader is assigned ~1.0 weight on its worst row. | `matrix_game_solver.jl:55-59` | Every `mixed` and `greedy` number in the CDC tables is the equilibrium of the reversed game. Reviewer 7 #2, Reviewer 8 #1. | **FIXED** Aug 31. `sms(-A)`/`sms(A')`, orientation derived from `stage_cost`. Pinned by a test asserting the old pairing is exploitable. |
-| D2 | **No Monte Carlo.** `init_game` hardcodes both orbits; `rand_IC` exists but its only call site is commented out. Only the vertex-sampling RNG varies between trials. | `IC.jl:19-26`, `IC.jl:24-25` | For deterministic matchups (greedy/greedy, greedy/FP-greedy, FP-greedy/FP-greedy) all 50 trials are bit-identical — those cells are N=1. `results.md:12` claims "independent initial conditions." | **OPEN** — Gate B (B1). |
+| D2 | **No Monte Carlo.** `init_game` hardcodes both orbits; `rand_IC` exists but its only call site is commented out. Only the vertex-sampling RNG varies between trials. | `IC.jl:19-26`, `IC.jl:24-25` | For deterministic matchups (greedy/greedy, greedy/FP-greedy, FP-greedy/FP-greedy) all 50 trials are bit-identical — those cells are N=1. `results.md:12` claims "independent initial conditions." | **FIXED** Sep 1 (B1). `init_game(...; disperse=true)` draws `a_P/a_E` uniform on (1.0045, 1.0055) plus ν and Ω jitter on both craft; `run_MC_games_parallel` **defaults `disperse=true`** so the failure cannot recur silently. Deliberately not `rand_IC` — see [k]. |
 | D3 | **Candidate trajectories may not reach their vertices.** `min_Δv_dist` folds terminal miss distance into the *objective* at weight 1.0 instead of constraining it; `sum_norm_Δv` returns Σ‖Δv‖² despite its name. | `min_fns.jl:54-55`, `obj_fns.jl:160-171` | If the miss is comparable to R=6.378 km the action space is fiction and both the lifting proposition and the safety claim collapse. Reviewer 5 #3. **Existential — measure in week 1.** | **RESOLVED — NOT A DEFECT.** Measured 2880 on-policy samples: median miss **4.1 cm**, p95 8.1 cm, max 18 cm = 2.8e-5·R. See note [a]. |
 | D4 | **Stage cost is not fuel.** Code computes `0.1*norm(u1-u2)` — the norm of the *difference* of control vectors, which rewards the evader for thrusting differently from the pursuer and the pursuer for matching thrust direction. Paper Eq. (9) writes `λ₂(‖u_P‖ − ‖u_E‖)`, which is differential fuel and *is* meaningful. | `matrix_game_solver.jl:179-190` | The implemented objective has no physical interpretation. Reviewer 7 minor #1. | **FIXED** Aug 31. `λ1·sqrt(dist+0.1) + λ2·(‖u_P‖−‖u_E‖)`; λ1/λ2 in `params`. Tests assert equal burns cancel exactly — the property `norm(u1-u2)` violated. |
 | D5 | **`Meta_*` pursuer transpose.** P2's meta branches use `players[2].cost * predicted_v_probs`; the FP branches correctly use `cost'`. | `matrix_game_solver.jl:394-405` | Indexes the wrong axis. Invalidates all existing `Meta_*`-as-P2 data. | **FIXED** Aug 31. Transpose added and `argmin`→`argmax` in `Meta_greedy`; `Meta_mixed` weight formula flipped to match `FP_mixed`. See [e]. |
@@ -145,6 +169,7 @@ D1–D9 are the original audit. **D10–D13 were found on Aug 31** while executi
 | D10 | **AD path broken — no gradient exists.** `cart2kep` allocates `oe = zeros(6)` (a `Vector{Float64}`) then assigns orbital elements into it. It sits on the objective's call path via `prop_kepler_tof:125` → `prop_kepler_tof_Nseg:174`, so `ForwardDiff.gradient` of the trajectory objective throws `MethodError` on `setindex!` with a `Dual`. Invisible because the only consumer of that gradient was `NelderMead()`, which never evaluates it. | `propagator.jl:179-186` | **Invalidates §9 risk 4.** No gradient-based solver — Ipopt, LBFGS, or the existing `min_bfgs` — could ever have run. The plan's LBFGS fallback shared the same broken dependency, so it was not a hedge. | **FIXED** Aug 31. One line. Gated: bitwise identical on 20,000 random states, and ForwardDiff now matches `central_fdm(5,1)` to 1.6e-9. |
 | D11 | **The fuel objective is inert.** In `min_Δv_dist` the terminal-miss term is a distance in km (1–40 at the Lambert guess) while `sum_norm_Δv` returns Σ‖Δv‖² in (km/s)² (~1e-3). At the implicit weight of 1.0 the miss term outweighs fuel by ~3 orders of magnitude. | `min_fns.jl:74-75`, `obj_fns.jl:159-171` | `min_Δv_dist` does not minimize Δv in any meaningful sense — it is a pure targeting solve. "Comparable ΔV budgets" is unsupported, and D4's stage cost operates on Δv values that were never fuel-optimized. **This is the real defect D3 was standing in front of.** | **FIXED** Aug 31. True ΔV with an ε=1e-12 desingularization for the gradient; `w_miss` in `params`, swept. See [g]. |
 | D12 | **Augmented Lagrangian double-counts the objective.** `min_aug_L_eq_ineq` sums `aug_L_fn` and `aug_L_ineq_fn`, each of which already includes `obj_fn(x)`, giving `2·obj_fn(x)` + both penalty sets. The correct single-call form (`aug_L_eq_ineq_fn`) exists and is commented out one line below. | `aug_L.jl:241-243` | The objective is weighted 2× against the constraints, so both are systematically under-enforced. Off the game hot path (`min_Δv_dist` → `min_aug_L_ineq`), but reached by `min_Δv` — the "correct pattern" for hard-constraining miss distance. | **OPEN**, deferred. The AL is now bypassed on the hot path (0/12 escalations), so this is reachable only via `min_Δv`. Fix if that path is ever used. |
+| D14 | **The objective guard checked `isfinite` but did not catch throws.** `min_Δv_dist_solve` wrapped the objective as `guarded(x) = (v = raw(x); isfinite(v) ? v : 1e6)`. A large enough trial Δv drives the mean anomaly to `Inf`, and `kepler_E` then evaluates `sin(Inf)`, which **raises `DomainError`** — control never returns, so the `isfinite` test is never reached. | `min_fns.jl:110` | Killed the first Gate B sweep ~200,000 solves in, after ~40 min. Invisible in Gate A: 15,000 smoke-sweep solves never hit it, so this is a defect that only a 900,000-solve run could surface. | **FIXED** Sep 1. `guarded` now catches `DomainError`/`InexactError`/`OverflowError` → the same 1e6 penalty (the line search backs off); anything else rethrows, so real bugs still surface. Pinned by the "objective guard survives a THROWING propagation" testset. |
 | D13 | **Opponent identification is structurally uncomputable for FP opponents.** `tracked_strategies` is `["mixed","greedy","random",1..6]` — it contains no `FP_*` or `Meta_*` hypotheses. | `IC.jl:74` | `p1_correct_id_rate` / `p2_correct_id_rate` are `NaN` against every FP opponent; `test/MC_results_late_game.csv` confirms this for all FP columns. `results.md` reports "correct-ID rate is 1.0 for all identifiable opponents" — true only because FP opponents are excluded by the word *identifiable*. The metric was never computed for the opponents the paper is about. | **OPEN** — a modeling gap, not a bug: extending it needs the opponent's `fp_belief`, which a player does not observe. Surface in the writing. |
 
 ### Notes
@@ -438,6 +463,106 @@ Fuel contributes essentially nothing to the asymmetry.
 plane normal to velocity; those coincide only for a circular orbit and differ by ~0.57 deg at
 e=0.01. Reviewer 5 #1 asked exactly how vertex positions are obtained, so say which plane.
 
+**[k] Gate B — the honest re-run (Sep 1-2).** `test/run_gate_b.jl`, 25 matchups x 100 trials x
+30 steps = **2,500 games, ~900,000 trajectory solves, 106.4 min** on 32 threads. Four things
+differ from every earlier sweep: **dispersed ICs** (D2/B1 — the first sweep in this project
+where trials are actually independent, so the first where an interval means anything),
+**`λ2 = 0`** (separation-only payoff, closing note [j]), **LBFGS** (note [i]'s lever, taken —
+affordable precisely because with `λ2 = 0` the ΔV difference never reaches a decision), and
+**`slim_save`** (33 MB/file vs 59, ~805 MB total).
+
+**It crashed the first time — see D14.** The `isfinite` objective guard did not catch a
+*thrown* `DomainError` from `sin(Inf)` inside `kepler_E`. 15,000 Gate A solves never hit it;
+~200,000 Gate B solves did. Worth stating as a general lesson: **a guard written against
+non-finite return values is not a guard against a propagator that throws.**
+
+**The first sweep is unpaired, and B4 asks for paired.** `run_MC_games_parallel` derives its
+per-game seeds from the rng it is handed (`play_games.jl:124`), and the driver threaded a
+single `MersenneTwister(1)` through all 25 calls in sequence — so every cell drew *different*
+ICs and only an unpaired test is licensed. Fixed by reseeding **inside** the loop, which makes
+game *k* use bit-identical ICs in all 25 cells (verified: `params.ic` matches across strategy
+pairs, because `IC.jl:61-65` draws all five IC variates unconditionally before anything
+strategy-dependent touches the rng). **Re-run in flight; the unpaired data is retained at
+`test/results/n30_unpaired_2026-09-01/`.**
+
+**FINAL — CRN sweep, Sep 2, 106.2 min.** Mean separation [km], mean ± 95% CI, n = 100. Rows
+P1 (evader, maximizes), columns P2 (pursuer, minimizes). `crn_ok` verified common random
+numbers from the realized `params.ic` before any paired number was quoted.
+
+| P1 \ P2 | greedy | mixed | random | FP_greedy | FP_mixed | **row mean** |
+|---|---|---|---|---|---|---|
+| greedy | 5.56±0.13 | 4.98±0.13 | 6.46±0.18 | 5.21±0.13 | 5.48±0.17 | 5.54±0.08 |
+| mixed | 5.05±0.13 | 4.98±0.13 | 6.78±0.19 | 4.87±0.13 | 5.56±0.15 | 5.45±0.09 |
+| random | 4.64±0.13 | 4.93±0.13 | 6.35±0.17 | 4.58±0.13 | 5.30±0.15 | 5.16±0.09 |
+| **FP_greedy** | 5.05±0.15 | 5.72±0.14 | 8.76±0.21 | **4.61±0.12** | 6.19±0.16 | **6.07±0.15** |
+| FP_mixed | 4.85±0.13 | 5.43±0.14 | 7.55±0.17 | 4.83±0.13 | 5.86±0.15 | 5.70±0.11 |
+| **col mean** | 5.03±0.07 | 5.21±0.07 | 7.18±0.11 | **4.82±0.06** | 5.68±0.07 | |
+
+**The headline is in the table, not asserted.** `FP_greedy` is simultaneously the best evader
+(row mean 6.07) *and* the best pursuer (column mean 4.82) — opponent modelling pays on both
+sides. And the exploitation/safety tradeoff is directly measured in the `FP_greedy − mixed`
+contrast, which **changes sign with the opponent**:
+
+| P2 | FP_greedy − mixed [km], paired | t | |
+|---|---|---|---|
+| greedy | **+0.003 ± 0.072** | +0.08 | **a tight null, not an underpowered one** |
+| mixed | **+0.735 ± 0.083** | +17.33 | significant |
+| random | **+1.983 ± 0.198** | +19.62 | significant |
+| **FP_greedy** | **−0.254 ± 0.051** | **−9.81** | **significant — exploiting an exploiter is worse than playing safe** |
+| FP_mixed | +0.631 ± 0.126 | +9.83 | significant |
+
+`FP_greedy` vs `FP_greedy` (4.61) is the lowest cell in the matrix: two mutual exploiters
+produce the worst outcome for the evader. **That is the paper's thesis falling out of the data.**
+
+**Pairing bought a 1.4x–3.5x reduction in standard error** (per-comparison ratios 2.79, 2.32,
+1.41, 3.54, 1.71), which is the concrete payoff of the CRN re-run and worth one sentence in the
+paper's experimental-design section. Two consequences beyond tighter intervals:
+
+- **The `greedy` column resolves from ambiguous to a genuine null.** Unpaired it read
+  ±0.19–0.20 km around a near-zero effect — indistinguishable from "underpowered." Paired, the
+  effect is +0.003 km with a ±0.072 km interval: FP's modelling machinery buys **nothing**
+  against a `greedy` pursuer, and that is now a *finding* rather than a failure to detect one.
+- **The sign reversal hardens.** −0.254 ± 0.051 at t = −9.81, against −0.302 ± 0.153 at
+  t = −3.86 unpaired. The single most important number in the paper is now ~2.5x better
+  resolved.
+
+**On reproducibility:** the two sweeps agree everywhere they should — identical
+`greedy`/`greedy` (5.56, seeded the same in both), row means within 0.06 km, and all four
+significant contrasts preserved in sign and rough magnitude. The differences between the tables
+are sampling noise across different IC draws, not a change in behaviour.
+
+**One thing a reviewer will attack, so pre-empt it in the writing.** `FP_greedy` gains
++0.76 km against a `mixed` pursuer, which is supposed to be unexploitable. No contradiction —
+`mixed` is a *stage-game* security strategy, and its guarantee does not compound across 30
+steps of a payoff matrix that moves between steps. But it must be said explicitly, and it is
+the same cross-step-pooling assumption C3 has to state anyway.
+
+**B5 — EGTA meta-game.** Value **5.1084 km**, certificate 9.4e-15. P1 support `greedy` 0.830 /
+`FP_greedy` 0.170; P2 support `mixed` 0.449 / `FP_greedy` 0.551. **Nothing is dominant** — no
+row weakly dominates more than 1 of the 4 others. That is the precise answer to Reviewer 8's
+objection: the honest claim is *support membership*, not dominance.
+
+Note the structure, which is the headline restated in equilibrium terms: **`FP_greedy` is in
+the support on both sides but is a pure strategy for neither.** The evader mixes it with
+`greedy` and the pursuer with `mixed` — i.e. the meta-game itself says exploitation is worth
+playing and worth *not* playing exclusively. `random` and `FP_mixed` are out of the support
+entirely on both sides.
+
+**B3 capture, partially.** There is still **no capture or termination condition in the code**,
+so capture is reported as a curve over radii rather than one invented threshold:
+
+| radius | 0.10 | 0.25 | 0.50 | 1.00 | 2.00 km |
+|---|---|---|---|---|---|
+| `mixed` evader (range over the 5 pursuers) | 0-1% | 1-10% | 19-32% | 66-96% | 99-100% |
+| `FP_greedy` evader | 0-3% | 1-21% | 6-38% | 13-100% | 43-100% |
+
+Minimum inter-player separations run **9 m to 229 m**. The curve is steepest between 0.5 and
+1.0 km, so **that interval is where the choice of radius actually changes conclusions** — worth
+knowing before picking one. `FP_greedy` vs `random` is the clear outlier (13% at 1 km against
+55-100% for every other matchup): an unpredictable opponent defeats the modelling, which is the
+expected and honest counterpoint to the headline. **Picking a radius is the open item, and B6
+is blocked on it.**
+
 ---
 
 ## 4. Workstreams
@@ -484,6 +609,12 @@ This directly answers Reviewer 7 #1, which asked whether the MPC problem is conv
 **Consequences to propagate:** every trajectory changes, so all existing results are invalidated — acceptable, since D1 already invalidates them. **Re-measure per-matchup wall clock after this lands**, because the Gate B and Gate C sweep estimates in §1 and §8 all derive from the 6 min/matchup Nelder-Mead baseline. Expect it to drop. Also revisit D6: with the constraint enforced natively, a physically meaningful `Δv_max` becomes settable and can actually bind.
 
 ### Gate B — the honest re-run (Sep 7 – Sep 13). **Narrative locks at the end of this gate.**
+
+> **Status Sep 2 — running five days early.** ✅ **B1** (dispersed ICs, D2 fixed),
+> ✅ **B2** (slim save, 33 MB vs 59), ✅ **B4** (intervals on every number; paired test valid
+> under verified CRN, 1.4-3.5x SE reduction), ✅ **B5** (EGTA; nothing dominant),
+> 🔶 **B3** (sweep done; capture reported as a curve because no capture *condition* exists yet
+> — that is the open item), ⬜ **B6** (blocked on B3's radius). All numbers in note [k].
 
 **B1. Real Monte Carlo (D2).** Add IC dispersion as keyword args to `init_game`, driven by the `local_rng` already passed at `play_games.jl:104`. Do **not** simply uncomment `rand_IC` — it drops the `a_P = 1.005a` drift and hands the pursuer the evader's velocity, a different scenario. Disperse around the nominal instead: pursuer semi-major-axis ratio over a range, plus phase/RAAN jitter on both craft. Raise trials to 100–200. (Peters et al. use 50–100 randomized initial states with SEM ribbons — that is the bar.)
 
@@ -589,7 +720,14 @@ Original specification:
 
 ## 9. Risks
 
-1. **The headline may shrink.** With correct signs, `mixed` becomes genuinely unexploitable and FP's gain against it should approach zero — that is what minimax *means*. The exploitation-vs-safety framing is robust to this because it predicts it, but the abstract cannot be written before Gate B closes.
+1. ~~**The headline may shrink.**~~ **DID NOT FIRE — and the reason is worth stating.** The
+   prediction was that FP's gain against `mixed` would approach zero once the signs were
+   correct. Measured, it is **+0.735 ± 0.083 km, t = +17.33** (note [k]). The prediction
+   assumed a *stage-game* minimax guarantee transfers to a 30-step receding-horizon game with a
+   payoff matrix that moves between steps. It does not. What *did* appear is the sharper
+   result: the FP-vs-`mixed` advantage **reverses sign** against an `FP_greedy` pursuer
+   (−0.254 ± 0.051, t = −9.81). The exploitation-vs-safety framing survives, and in a stronger
+   form than the one the risk anticipated.
 2. ~~**D3 could be fatal.**~~ **RETIRED Aug 31.** Measured: median terminal miss 4.1 cm against R = 6.378 km, no late-game degradation. The action space is well defined and the lifting is faithful. See note [a].
 3. **Novelty pressure from [3].** Peters et al. covers lifting, mixed strategies, receding horizon, time-varying payoffs, and a randomized-IC tournament with SEM. The delta is online opponent modeling and the exploitation/safety tradeoff. Everything in the paper should be pointed at that delta; anything that reads as "Peters et al. applied to orbits" should be cut.
 4. ~~**The Ipopt migration (A6) is the largest single code risk.**~~ **RETIRED Aug 31.** It landed inside Gate A, before any expensive sweep, as planned. Two things went differently: the stated mitigation *"the objective is already ForwardDiff-differentiable"* was **false** (D10 — no gradient existed at all, and the LBFGS fallback shared the same broken dependency), and **Ipopt itself did not converge** (note [h]). BFGS + BackTracking is in instead: 99.53% convergence over 15,000 solves in the smoke sweep.

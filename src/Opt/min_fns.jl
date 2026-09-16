@@ -107,7 +107,23 @@ function min_Δv_dist_solve(
 
     raw(x) = sum_norm_Δv( x, N ) +
              w_miss * miss_distance_prop_kepler_Nseg( rv_0, x, N, rv_f, tof_N, mu )
-    guarded(x) = (v = raw(x); isfinite(v) ? v : 1e6)
+
+    # The guard must catch THROWN exceptions, not just non-finite return values.
+    # A large trial Δv can drive the mean anomaly to Inf, and `kepler_E` then calls
+    # `sin(Inf)`, which raises DomainError before any value comes back — so an
+    # `isfinite` check alone never sees it. That killed a 900,000-solve sweep on
+    # roughly its 200,000th solve; 15,000 solves in the earlier smoke sweep never
+    # hit it. Numeric blow-ups become the large finite penalty (the line search then
+    # backs off); anything else rethrows, so genuine bugs still surface.
+    function guarded(x)
+        v = try
+            raw(x)
+        catch e
+            (e isa DomainError || e isa InexactError || e isa OverflowError) || rethrow()
+            return 1e6
+        end
+        isfinite(v) ? v : 1e6
+    end
 
     # nondimensionalize: decision variables are O(1e-2) while objective gradients are
     # O(1e3), since a small Δv moves the terminal position a long way over 10 segments

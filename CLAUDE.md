@@ -2,6 +2,44 @@
 
 Guidance for Claude Code when working in this repository.
 
+## Current state
+
+*Rewritten in place each session. Last updated: 2026-09-16.*
+
+- **Phase:** Gate B complete (data + analysis). Narrative locks after B3/B6.
+- **Config (Gate B, current):** payoff is **separation-only** (`params.λ2 = 0`); trajectory
+  solver is **LBFGS + BackTracking** (default in `min_fns.jl`, swap via `method=` kwarg);
+  `disperse=true` (D2 fixed, default); `slim_save=true` (33 MB/file); 100 trials × 30 steps;
+  CRN via reseeding `MersenneTwister(1)` *inside* the matchup loop (`test/run_gate_b.jl`).
+- **Last run:** CRN sweep 2026-09-02, 106.2 min on 32 threads → `test/results/n30/`
+  (25 matchups × 100 games, ~900k solves). Unpaired predecessor retained at
+  `test/results/n30_unpaired_2026-09-01/`. Smoke sweep at `test/results/n10/`.
+- **Best numbers:** `FP_greedy` is best evader (row mean 6.07±0.15 km) *and* best pursuer
+  (col mean 4.82±0.06). `FP_greedy − mixed` **reverses sign** vs an `FP_greedy` pursuer:
+  −0.254±0.051 km, t = −9.81. EGTA meta-game value 5.1084 km; `FP_greedy` in both supports,
+  pure for neither. Solver: 99.53% convergence, 0/2,500 LP certificate failures.
+- **Next step:** pick the **capture radius** (B3 — curve is steepest 0.5–1.0 km, so the choice
+  matters there), then **B6** (oracle best-response pursuer). Then Gate C (C1–C5).
+- **Repo state:** Gate B work is **uncommitted** — `min_fns.jl` (D14 guard), `play_games.jl`
+  (`slim_save`), `runtests.jl` (+30 asserts), `test/run_gate_b.jl`, `test/analyze_gate_b.jl`.
+- **Open defects:** D12 (AL double-count, deferred, off hot path), D13 (FP opponents
+  unidentifiable — modeling gap, surface in the writing).
+
+## Working rules
+
+- Read `Current state` above at session start. Read LOG.md only for history on a specific task.
+- End of any training/eval session: prepend a block to LOG.md, then update `Current state`.
+- Check the newest LOG block's "Predicted" against the new run before analyzing anything else.
+
+## Documentation map
+
+| File | Role |
+|---|---|
+| `CLAUDE.md` | This file. Always loaded: current state, how to run, code map, conventions |
+| `LOG.md` | Append-only decision record, newest first. Corrections are new entries |
+| `README.md` | Human-readable detailed plan: intro, references, problem, method, results |
+| `docs/README_plan.md` | **Archived** original handoff plan — superseded by the three above |
+
 ## What this is
 
 `trajectory_optimization_game_theory` — a Julia package implementing a **two-spacecraft orbital
@@ -9,7 +47,7 @@ pursuit-evasion game** in low Earth orbit.
 
 An **evader (P1)** follows a reference orbit; a **pursuer (P2)** tries to close distance. Both
 start near-circular at 620 km altitude (`a = 6998 km`, `e = 0.01`, `i = 20°`, period ~97 min);
-the pursuer is offset at `a_P = 1.005·a`.
+the pursuer is offset at `a_P ≈ 1.005·a` (dispersed per trial since D2's fix).
 
 At each **game step**:
 
@@ -25,8 +63,9 @@ At each **game step**:
 
 This is the "lifting" of a continuous trajectory game onto a finite action set.
 
-**Target venue: AAMAS 2027** (paper deadline Oct 8 2026). Previously submitted to CDC 2026 and
-rejected. **`README_plan.md` is the authoritative plan and status document** — read it first.
+**Target venue: AAMAS 2027** (abstract Oct 1, paper Oct 8 2026). Previously submitted to CDC
+2026 and rejected. The research narrative and results live in `README.md`; the decision history
+in `LOG.md`.
 
 ## Running things
 
@@ -36,13 +75,14 @@ julia -t 32 --project=.        # ALWAYS pass -t; Threads.nthreads() defaults to 
 
 - **All result paths are relative** — run from the repo root or paths break.
 - `run_MC_games_parallel` uses `Threads.@threads`; without `-t` every sweep is serial.
-- `test/runtests.jl` — the real test suite (~3080 assertions). Run it after any solver change.
-- `test/run_all_MC_table.jl` — the 5×5 matchup sweep, writes `.jld2` under `test/results/`.
-- `test/analyze_late_game.jl` — post-processes into `test/MC_results_late_game.csv` + figures.
+- `test/runtests.jl` — the real test suite (~3,135 assertions). Run it after any solver change.
+- `test/run_gate_b.jl` — the current sweep driver (5×5 × 100 × 30, CRN, ~106 min on 32 threads).
+- `test/analyze_gate_b.jl` — B4/B5 analysis: paired intervals, EGTA, capture curve.
+- `test/run_all_MC_table.jl` / `test/analyze_late_game.jl` — the older sweep + analysis pair.
 - Everything else in `test/` is a REPL-style script, not a test.
 
-**Measured cost** (32-core machine): ~56 ms per trajectory solve in steady state, ~0.67 s per
-game step, ~46 s per 30-step game single-threaded, **~45 min for a full 5×5 sweep**.
+**Measured cost** (32-core machine): ~16 ms per trajectory solve with LBFGS (~0.5 s with BFGS
+in-pipeline), ~46 s per 30-step game single-threaded, **~106 min for the full 5×5 × 100 sweep**.
 
 ## Code organization
 
@@ -51,17 +91,17 @@ game step, ~46 s per 30-step game single-threaded, **~45 min for a full 5×5 swe
 | `src/game_theory/matrix_game_solver.jl` | The core. LP Nash solver, `stage_cost`, cost matrices, strategy selection, belief updates |
 | `src/game_theory/exploitability.jl` | Exploitability / NashConv / belief exploitability |
 | `src/game_theory/play_games.jl` | Game loop: `prop_game_step`, `run_game`, `run_MC_games_parallel` |
-| `src/Opt/min_fns.jl` | `min_Δv_dist` (the one the game uses), `min_optim`, `min_bfgs` |
-| `src/Opt/aug_L.jl` | Hand-rolled augmented Lagrangian |
+| `src/Opt/min_fns.jl` | `min_Δv_dist` (the one the game uses), `min_Δv_dist_solve`, guarded objective |
+| `src/Opt/aug_L.jl` | Hand-rolled augmented Lagrangian (bypassed unless the ΔV cap binds — it never has) |
 | `src/Opt/obj_fns.jl` | `miss_distance_prop_kepler_Nseg`, `sum_norm_Δv`, `constrain_Δv` |
 | `src/Opt/min_ipopt.jl` | 27-line unconstrained stub, **not wired into the pipeline** |
 | `src/Dyn/kepler.jl` | `prop_kepler_tof_Nseg` — the workhorse propagator |
 | `src/Dyn/propagator.jl` | `kep2cart` / `cart2kep`, ODE propagation, `prop_chosen_rv` |
 | `src/Dyn/prop_delta_v.jl` | `find_ref_orbit`, `prop_rv_ref` |
 | `src/Lambert/` | Battin Lambert solver — supplies the optimizer's initial guess |
-| `src/Utils/IC.jl` | `init_game` — **all initial conditions and `params` live here** |
+| `src/Utils/IC.jl` | `init_game` — **all initial conditions and `params` live here** (incl. dispersion, λ1/λ2, w_miss, Δv_max) |
 | `src/Utils/structs.jl` | `player_struct`, `game_struct` |
-| `src/Utils/Utils.jl` | `polygon_vertices`, save/load, MC statistics |
+| `src/Utils/Utils.jl` | `polygon_vertices`, save/load, `slim()` persistence, MC statistics |
 | `src/Utils/plotting.jl` | GLMakie plotting |
 | `src/old/` | **Dead** — not included by the module |
 
@@ -76,7 +116,7 @@ prop_game_step                      play_games.jl:3
   compute_states_nash               matrix_game_solver.jl (orchestrator)
     compute_players_XU              12 trajectory optimizations (2 players × 6 vertices)
     compute_cost_matrices           6×6 zero-sum A;  players[2].cost == -players[1].cost
-    compute_mixing_weights!         the LP → mixed Nash
+    compute_mixing_weights!         the LP → mixed Nash (Ipopt, tol=1e-14, nash_certificate)
     choose_strategies!              per-strategy vertex selection
     update_beliefs!                 FP counts + Bayesian meta-strategy posterior
     update_chosen_trajectories!     truncate horizon (10) to executed (5)
@@ -84,8 +124,8 @@ prop_game_step                      play_games.jl:3
 
 Fresh `player_struct`s are built each step; only `fp_belief`, `strategy_belief`,
 `tracked_strategies`, and `learner_state` carry forward. `game.p1_state` / `p2_state` are
-append-only, so every step's full candidate set is retained — this is why `.jld2` files reach
-~59 MB.
+append-only, so every step's full candidate set is retained unless `slim_save` drops the
+candidate trajectory sets (~77% of the file; nothing the analysis reads).
 
 ## Conventions that will bite you
 
@@ -98,7 +138,7 @@ append-only, so every step's full candidate set is retained — this is why `.jl
 
 `solve_mixed_security_strategy(M)` returns the security strategy of the row player who
 **MINIMIZES** `M`. So `solve_mixed_nash` uses `sms(-A)` for P1 and `sms(A')` for P2. Getting
-this backwards is defect D1, which invalidated every `mixed`/`greedy` number in the CDC
+this backwards was defect D1, which invalidated every `mixed`/`greedy` number in the CDC
 submission. `test/runtests.jl` pins it with a test asserting the *old* pairing is exploitable.
 
 **Other conventions:**
@@ -111,69 +151,46 @@ submission. `test/runtests.jl` pins it with a test asserting the *old* pairing i
 - `axis_123` is **not an orthogonal frame**: `a1·a2 ≈ -e`. The hexagon lies in the `a2`–`a3`
   (radial/normal) plane, not the plane normal to velocity.
 - Vertex order from `polygon_vertices` is `(top, topin, botin, bot, botout, topout)` = 1..6, and
-  it returns a **fixed-arity NamedTuple** — changing vertex count means rewriting it (see C4).
+  it returns a **fixed-arity NamedTuple** — changing vertex count means rewriting it (see C4 in
+  `README.md`).
 - `params` is a plain `NamedTuple` built in `init_game`, stored as a 1-element vector, hence the
-  `game.params[1]` idiom.
-
-## Known defects
-
-**`README_plan.md` §3 is the source of truth** — it has locations, consequences, status, and
-measured numbers. Compact index:
-
-| # | Summary | Status |
-|---|---|---|
-| D1 | LP sign inversion — evader given a minimizing strategy | **FIXED** |
-| D2 | No Monte Carlo — `init_game` hardcodes both orbits, so deterministic matchups are N=1 | OPEN (Gate B) |
-| D3 | "Candidates may not reach their vertices" | **NOT A DEFECT** — median miss 4.1 cm vs R = 6.378 km |
-| D4 | Stage cost uses `norm(u1-u2)`, not differential fuel | OPEN (Day 4) |
-| D5 | `Meta_*` P2 branches: missing transpose **and** inverted sign | OPEN (Day 8) |
-| D6 | ΔV cap inert — measured max ‖Δv‖ 0.0221 km/s vs a 2.0 cap; even 0.1 would not bind | Plumbing FIXED |
-| D7 | Silent LP failure; OSQP on a pure LP | **FIXED** — Ipopt, `tol=1e-14` |
-| D8 | Live `@exfiltrate`; broken `load_games_vec` | **FIXED** |
-| D9 | Nelder-Mead on a 30-D problem, discarding the gradient | OPEN (Day 7) |
-| D10 | `cart2kep` allocated `zeros(6)` → **all ForwardDiff broken** | **FIXED** |
-| D11 | Fuel objective inert — miss term outweighs fuel ~1000× | OPEN (Day 5) |
-| D12 | `min_aug_L_eq_ineq` double-counts the objective | OPEN, deferred |
-| D13 | `tracked_strategies` has no FP/Meta hypotheses → ID rate structurally `NaN` | OPEN (modeling gap) |
+  `game.params[1]` idiom. Since B1, `params.ic` records the realized IC draw — the CRN
+  fingerprint the paired analysis checks.
+- **The objective guard must catch throws, not just non-finite values** (D14): `kepler_E` can
+  raise `DomainError` from `sin(Inf)` on a large trial Δv. `guarded` in `min_fns.jl` catches
+  `DomainError`/`InexactError`/`OverflowError` → 1e6 penalty; anything else rethrows.
 
 ## Gotchas
 
 - **Threads default to 1.** Always `-t`.
 - **Paths are relative.** Run from the repo root.
-- **`test/results/` does not exist here** — gitignored, never copied from the original machine.
-  Any analysis of "existing results" must regenerate them.
-- **The trajectory optimizer is still Nelder-Mead.** Ipopt is currently used *only* for the
-  matrix-game LP. Do not confuse the two roles.
+- **The trajectory optimizer is LBFGS + BackTracking** (BFGS available via `method=`). Ipopt is
+  used *only* for the matrix-game LP — it does not converge on the trajectory problem (0/12 at
+  any budget; LOG 2026-08-31). Do not confuse the two roles.
+- **Never `error()` inside `Threads.@threads`.** One bad 6×6 would kill an entire sweep. Record
+  and fall back; report the failure rate.
+- **Value-preservation discipline.** When fixing infrastructure, verify numbers are unchanged
+  (bitwise where possible) so that when results *do* move, the cause is unambiguous.
+- **Measure before choosing.** Several plan-era numbers did not reproduce (0.591 → 0.0221 km/s;
+  Ipopt "already de-risked" → 0% convergence). Re-measure before trusting a written claim.
+- **No number enters a paper table without an interval.** And no claim from n=2 (the retracted
+  vertex-geometry confound is the cautionary tale — LOG 2026-09-01).
 - Julia is **1.12.7**; `Manifest.toml` was resolved under **1.11.1**. Any `Pkg.add` re-resolves
   it — treat dependency changes as deliberate, tagged events.
-- The repo is on branch **`aamas`**, not `main`. There is no `README.md`.
-- `src/old/` and `test/old/` are dead code. `min_golden_ratio` is dead *and* broken (calls `f`,
-  parameter is `fn`).
+- The repo is on branch **`aamas`**, not `main`.
+- `src/old/` and `test/old/` are dead code. `min_golden_ratio` is dead *and* broken.
 - The Julia LSP reports spurious `UnusedBinding` warnings on NamedTuple fields. Ignore them.
 
-## Paper sources — three divergent write-ups
+## Paper sources & division of labor
 
 1. `Game_Theory_Space_CDC_2026/root.tex` + `sections/` — the **old pre-fictitious-play draft**,
    *not* the CDC submission.
 2. `Game_Theory_Space_CDC_2026/Game_Theory_Space_ICRA_2026 (2).pdf` — the only in-repo copy of
    the **actual CDC submission**; its source lives in Overleaf.
-3. `test/results.md` — a third, intermediate write-up. Several of its claims are now known
-   false (notably "independent initial conditions", contradicted by D2).
+3. Reviews in `Game_Theory_Space_CDC_2026/reviews/` (3 reviewers + AE). Common theme: the
+   game-theoretic formulation was under-specified and internally inconsistent. Two complaints
+   were genuine code bugs (D1, and the solver-detail request behind D7/D9).
 
-Reviews are in `Game_Theory_Space_CDC_2026/reviews/` (3 reviewers + AE). Their common theme:
-the game-theoretic formulation is under-specified and internally inconsistent. Two of the
-complaints turned out to be genuine code bugs (D1, and the solver-detail request behind D7/D9).
-
-**Division of labor: the author owns the paper in Overleaf.** Deliver prose as markdown and
-figures as PDF. **Do not create LaTeX in this repo.**
-
-## Working style for this repo
-
-- **Value-preservation discipline.** When fixing infrastructure, verify numbers are unchanged
-  (bitwise where possible) so that when results *do* move, the cause is unambiguous.
-- **Measure before choosing.** The OSQP→Ipopt swap, the D3 dismissal, and the D6 reframing were
-  all decided by measurement that contradicted the written plan. Re-measure before trusting a
-  claim in `README_plan.md` — several of its original numbers did not reproduce.
-- **Never `error()` inside `Threads.@threads`.** One bad 6×6 would kill an entire sweep. Record
-  and fall back; report the failure rate.
-- **No number enters a paper table without an interval.**
+**Division of labor: the author (Junette Hsin) owns the paper in Overleaf.** Deliver prose as
+markdown and figures as PDF. **Do not create LaTeX in this repo.** Double-blind: any
+supplementary zip must strip author names and git history.

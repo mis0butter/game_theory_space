@@ -115,7 +115,7 @@ silently; pass `disperse=false` explicitly if a fixed-IC sweep is genuinely want
 `ic_kw...` forwards `a_ratio_range`, `σ_ν`, `σ_Ω` to `init_game`.
 """
 function run_MC_games_parallel(rng, N_games, n_game_steps, p1_strategy="mixed", p2_strategy="mixed";
-                               disperse::Bool=true, ic_kw...)
+                               disperse::Bool=true, slim_save::Bool=false, ic_kw...)
 
     # Create thread-safe storage
     games_vec = Vector{Any}(undef, N_games)
@@ -140,7 +140,10 @@ function run_MC_games_parallel(rng, N_games, n_game_steps, p1_strategy="mixed", 
 
     end
 
-    save_games_vec(games_vec)
+    # `slim_save` drops the six candidate trajectory sets per player per step: ~77% of
+    # the file, and nothing the analysis reads (B2). A_k, both weight vectors, chosen,
+    # the beliefs, executed states, solve_info and params are all kept.
+    save_games_vec(slim_save ? slim(games_vec) : games_vec)
 
     return games_vec
 end

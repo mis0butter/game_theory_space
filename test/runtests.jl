@@ -407,6 +407,36 @@ end
     @test_throws ErrorException init_game(MersenneTwister(10), "Meta_greedy", "oracle")
 end
 
+@testset "objective guard survives a THROWING propagation" begin
+    # kepler_E raises DomainError on sin(Inf) rather than returning a non-finite
+    # value, so an isfinite() check alone is not a guard. This reproduces the
+    # failure that killed a 900k-solve sweep.
+    params, players, game = init_game(MersenneTwister(21))
+    V = collect(polygon_vertices(game.rv_ref_E[end][end, :], params))
+    rv0 = players[1].rv_0_hist[1, :]
+    rvf = [V[1]; players[1].rv_0_hist[end, 4:6]]
+    N, mu, th = params.n_seg_horizon, params.mu, params.t_horizon
+
+    # Extreme Δv makes the propagation misbehave — sometimes returning non-finite,
+    # sometimes THROWING (DomainError from sin(Inf) inside kepler_E). Which of the two
+    # depends on the magnitude, so assert only that it is not a usable number.
+    bad = try
+        miss_distance_prop_kepler_Nseg(rv0, fill(1e12, N, 3), N, rvf, th / N, mu)
+    catch e
+        e isa DomainError || rethrow(); NaN
+    end
+    @test !isfinite(bad)
+
+    # The solver must be robust to that either way: the guard converts both the
+    # non-finite value AND the thrown exception into a large finite penalty, so the
+    # line search backs off instead of the whole sweep dying.
+    for tgt in (rvf, [V[1] .* 50; players[1].rv_0_hist[end, 4:6]])   # sane and absurd targets
+        s = min_Δv_dist_solve(rv0, tgt, th, N, mu; Δv_max = params.Δv_max, w_miss = params.w_miss)
+        @test all(isfinite, s.Δv_sol)
+        @test isfinite(s.max_Δv)
+    end
+end
+
 @testset "B2: slim persistence + capture curve" begin
     _, _, g = init_game(MersenneTwister(12))
     sg = slim_game(g)
