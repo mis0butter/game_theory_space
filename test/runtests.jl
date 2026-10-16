@@ -1,6 +1,7 @@
 using trajectory_optimization_game_theory
 using Test
 using LinearAlgebra, Random, Statistics
+using StatsBase: sample, ProbabilityWeights   # C2's regret check draws from learner mixtures
 using ForwardDiff, FiniteDifferences
 using JuMP
 
@@ -451,6 +452,255 @@ end
     @test issorted(cc.rate)
     @test cc.rate[1] == 0.0 && cc.rate[end] == 1.0
     @test min_separation(game) > 0
+end
+
+@testset "B3: capture condition (hard 0.2 / soft 1.0 km)" begin
+    params, _, _ = init_game(MersenneTwister(1))
+    @test params.r_capture_hard == 0.2         # ISS keep-out-sphere radius
+    @test params.r_capture_soft == 1.0         # proximity-ops scale
+    @test params.r_capture_hard < params.r_capture_soft < params.R_polygon
+
+    game, params = run_game(MersenneTwister(13), 4, "random", "random")
+
+    # value preservation: the slim-compatible rv_chosen series must reproduce the
+    # old X-based dist_norm minimum EXACTLY, and survive slimming unchanged
+    @test min_separation(game) == minimum(dist_norm(game, params))
+    @test min_separation(slim_game(game)) == min_separation(game)
+
+    # capture flags are exactly first passage below the radius, hard implies soft
+    cs = capture_stats(game)
+    @test cs.r_hard == 0.2 && cs.r_soft == 1.0
+    @test cs.min_sep == min_separation(game)
+    @test cs.hard == (cs.min_sep <= cs.r_hard)
+    @test cs.soft == (cs.min_sep <= cs.r_soft)
+    @test !cs.hard || cs.soft
+
+    # forced capture: an absurd radius is crossed at the very first sample
+    big = capture_stats(game; r_hard = 1e6, r_soft = 1e6)
+    @test big.hard && big.soft
+    @test big.t_hard == big.t_soft == game.tt[1] && big.k_hard == big.k_soft == 1
+
+    # never captured: NaN time, step 0 — analyzable without special-casing
+    none = capture_stats(game; r_hard = 0.0, r_soft = 0.0)
+    @test !none.hard && !none.soft
+    @test isnan(none.t_hard) && isnan(none.t_soft) && none.k_hard == none.k_soft == 0
+
+    # the soft zone is entered no later than the hard zone
+    r = 1.01 * cs.min_sep
+    both = capture_stats(game; r_hard = r, r_soft = 2r)
+    @test both.hard && both.soft && both.t_soft <= both.t_hard
+
+    # radii read from params but overridable; params without the fields fall back
+    old_params = Base.structdiff(params, NamedTuple{(:r_capture_hard, :r_capture_soft)})
+    cs_old = capture_stats(game, old_params)
+    @test (cs_old.r_hard, cs_old.r_soft) == (0.2, 1.0)
+    @test cs_old.hard == cs.hard && cs_old.soft == cs.soft
+
+    # the series behind it all: times start at tt[1], advance by dt_seg, never decrease
+    # within a step, and consecutive steps share their boundary sample exactly
+    s = separation_series(game, params)
+    dt_seg = params.t_horizon / params.n_seg_horizon
+    @test s.t[1] == game.tt[1] && s.t[2] == game.tt[1] + dt_seg
+    @test length(s.t) == length(s.d) == length(s.k)
+    for k in 1:game.i_game_step[end]-1
+        i_last  = findlast(==(k), s.k)
+        i_first = findfirst(==(k + 1), s.k)
+        @test s.d[i_last] == s.d[i_first]       # shared boundary, bitwise
+        @test s.t[i_last] ≈ s.t[i_first] atol = 1e-9
+    end
+
+    # Wilson interval: bracketed, contains p̂, degenerate endpoints behave
+    lo, hi = wilson95(0, 100);   @test lo == 0.0 && 0 < hi < 0.05
+    lo, hi = wilson95(100, 100); @test hi == 1.0 && 0.95 < lo < 1
+    lo, hi = wilson95(10, 100);  @test lo < 0.1 < hi
+end
+
+@testset "C2: no-regret learners (regret matching, Hedge)" begin
+    # both learners run a full game and carry state across steps
+    for s in ("regret_matching", "hedge")
+        g, _ = run_game(MersenneTwister(13), 5, s, "mixed")
+        st = g.p1_state[end].learner_state
+        @test st !== nothing
+        @test length(st.regret) == 6 && length(st.payoff) == 6
+        @test all(1 .<= [x.chosen for x in g.p1_state] .<= 6)
+        # state must actually accumulate, not reset each step
+        @test g.p1_state[end].learner_state.payoff != g.p1_state[1].learner_state.payoff
+    end
+
+    # learners are INERT for every strategy used in Gates A/B: no learner_state is
+    # created, so update_learners! cannot perturb any existing result
+    g, _ = run_game(MersenneTwister(13), 4, "FP_greedy", "mixed")
+    @test all(x.learner_state === nothing for x in g.p1_state)
+    @test all(x.learner_state === nothing for x in g.p2_state)
+
+    # regret matching opens uniform (no positive regret yet) ...
+    p = player_struct()
+    w0 = learner_weights("regret_matching", p, 6, (;))
+    @test all(≈(1 / 6), w0)
+    # ... and once regret is positive it plays proportionally to the positive part only
+    p.learner_state.regret .= [2.0, -1.0, 1.0, 0.0, -5.0, 3.0]
+    w = learner_weights("regret_matching", p, 6, (;))
+    @test w == [2.0, 0.0, 1.0, 0.0, 0.0, 3.0]
+
+    # Hedge weights increase with cumulative payoff and survive a large-payoff run
+    # without overflowing (the max-shift guard)
+    q = player_struct()
+    learner_state!(q, 6).payoff .= [0.0, 1.0, 2.0, 3.0, 4.0, 1e6]
+    wh = learner_weights("hedge", q, 6, (; η_hedge = 0.5))
+    @test all(isfinite, wh) && sum(wh) > 0
+    @test argmax(wh) == 6
+
+    # THE GUARANTEE: external regret must grow sublinearly, i.e. max_i R_i / T -> 0.
+    # Run each learner in self-play on a frozen matrix and check the decay directly.
+    function maxregret_over_T(alg, T)
+        A = randn(MersenneTwister(7), 6, 6)
+        n = 6
+        R1, P1v, R2, P2v = zeros(n), zeros(n), zeros(n), zeros(n)
+        rng = MersenneTwister(2)
+        wt(R, P) = alg == "regret_matching" ?
+            (all(iszero, max.(R, 0.0)) ? fill(1 / n, n) : max.(R, 0.0)) :
+            (z = 0.5 .* P; z .-= maximum(z); exp.(z))
+        for _ in 1:T
+            i = sample(rng, ProbabilityWeights(wt(R1, P1v)))
+            j = sample(rng, ProbabilityWeights(wt(R2, P2v)))
+            u1 = A[:, j];  R1 .+= u1 .- u1[i];  P1v .+= u1
+            u2 = -A[i, :]; R2 .+= u2 .- u2[j];  P2v .+= u2
+        end
+        max(maximum(R1), maximum(R2)) / T
+    end
+    for alg in ("regret_matching", "hedge")
+        r100, r10k = maxregret_over_T(alg, 100), maxregret_over_T(alg, 10_000)
+        @test r10k < r100                     # sublinear
+        @test r10k < 0.05                     # and genuinely small by T = 10,000
+    end
+
+    # an oracle CAN best-respond to a learner: its mixture is a deterministic function
+    # of accumulated state, so this is the `mixed` case (knows the distribution, not the draw)
+    _, pl, _ = init_game(MersenneTwister(8), "regret_matching", "oracle")
+    @test 1 <= pl[2].chosen <= 6
+end
+
+@testset "C1: recency-weighted FP (γ), with γ=1 preserving plain FP exactly" begin
+    @test init_game(MersenneTwister(1))[1].γ_fp == 1.0        # default is plain FP
+
+    # γ = 1 passed explicitly must be bitwise identical to the default path
+    g1, _ = run_game(MersenneTwister(13), 5, "FP_greedy", "FP_greedy")
+    g2, _ = run_game(MersenneTwister(13), 5, "FP_greedy", "FP_greedy"; γ_fp = 1.0)
+    for k in eachindex(g1.p1_state)
+        @test g1.p1_state[k].fp_belief == g2.p1_state[k].fp_belief
+        @test g2.p2_state[k].fp_belief == g2.p2_state[k].fp_belief
+        @test g1.p1_state[k].chosen == g2.p1_state[k].chosen
+        @test g1.p2_state[k].chosen == g2.p2_state[k].chosen
+    end
+
+    # Against a FIXED-vertex evader the belief has an exact closed form: the ones(n) prior
+    # is discounted n_updates times, and vertex j accumulates the geometric series. Note
+    # init_game itself performs one update, so n_updates == length(p2_state), not that - 1.
+    for γ in (0.5, 0.9)
+        j = 3
+        g, _ = run_game(MersenneTwister(13), 6, j, "FP_greedy"; γ_fp = γ)
+        b = g.p2_state[end].fp_belief            # P2's belief about P1, who always plays j
+        n = length(g.p2_state)
+        @test b[1] ≈ γ^n                                             atol = 1e-12
+        @test b[j] ≈ γ^n + sum(γ^t for t in 0:n-1)                   atol = 1e-12
+        @test all(b[i] ≈ γ^n for i in eachindex(b) if i != j)
+    end
+
+    # discounting must concentrate belief faster than uniform pooling
+    function mass(γ)
+        g, _ = run_game(MersenneTwister(13), 6, 3, "FP_greedy"; γ_fp = γ)
+        b = g.p2_state[end].fp_belief
+        return b[3] / sum(b)
+    end
+    @test mass(0.5) > mass(0.9) > mass(1.0)
+
+    # effective memory 1/(1-γ): γ=0.9 keeps ~10 steps, γ=0.5 ~2
+    @test isapprox(1 / (1 - 0.9), 10.0)
+    @test isapprox(1 / (1 - 0.5), 2.0)
+
+    # PER-PLAYER γ. A single global γ cannot answer C1's question in a self-play cell:
+    # with both sides discounting, FP vs FP is a symmetric perturbation and a change in
+    # separation says nothing about whether forgetting helps the evader specifically.
+    sym  = run_game(MersenneTwister(13), 5, "FP_greedy", "FP_greedy"; γ_fp = 0.5)[1]
+    asym = run_game(MersenneTwister(13), 5, "FP_greedy", "FP_greedy"; γ_fp = 0.5, γ_fp_p2 = 1.0)[1]
+    @test sum(sym.p1_state[end].fp_belief) ≈ sum(asym.p1_state[end].fp_belief)   # P1 same
+    @test sum(asym.p2_state[end].fp_belief) > sum(sym.p2_state[end].fp_belief)   # P2 not discounted
+    # an undiscounted player accumulates one count per update on top of the ones(n) prior
+    @test sum(asym.p2_state[end].fp_belief) ≈ 6 + length(asym.p2_state)
+    # γ_fp_p2 defaults to γ_fp, so the single-γ form is unchanged
+    @test init_game(MersenneTwister(1); γ_fp = 0.7)[1].γ_fp_p2 == 0.7
+    # ...and the asymmetric case gets its own results path
+    @test results_folder(30, "FP_greedy", "FP_greedy"; γ_fp = 0.5) !=
+          results_folder(30, "FP_greedy", "FP_greedy"; γ_fp = 0.5, γ_fp_p2 = 1.0)
+end
+
+@testset "C4: vertex arity generalizes, and n=6 is preserved exactly" begin
+    # the default is unchanged in every one of the four sites that used to hardcode 6
+    p6, pl6, _ = init_game(MersenneTwister(5))
+    @test p6.n_vertices == 6
+    @test length(pl6[1].fp_belief) == 6
+    @test size(pl6[1].cost) == (6, 6)
+    @test count(x -> x isa Int, pl6[1].tracked_strategies) == 6
+
+    # geometry: regular polygon of the requested arity, in the ê2-ê3 plane
+    _, _, g = init_game(MersenneTwister(5))
+    rv = g.rv_ref_E[end][end, :]
+    a1, a2, a3 = axis_123(rv)
+    n̂ = normalize(cross(a2, a3))
+    for n in (6, 12, 24)
+        V = polygon_vertices(rv, (; R_polygon = 6.378, n_vertices = n))
+        @test length(V) == n
+        for i in 1:n
+            @test isapprox(norm(V[i] - rv[1:3]), 6.378; rtol = 1e-10)
+            # adjacent spacing of a regular n-gon is 2R sin(pi/n) -- equals R only at n=6
+            @test isapprox(norm(V[i] - V[mod1(i + 1, n)]), 2 * 6.378 * sind(180 / n); rtol = 1e-8)
+            @test abs(dot(V[i] - rv[1:3], n̂)) < 1e-10
+        end
+    end
+
+    # n=6 takes the ORIGINAL arithmetic path, not the general formula: the two differ in
+    # the last bits (cosd(120) is not bitwise -cosd(60)), and every Gate A/B number was
+    # produced by the original. Pin it against the general formula's known deviation.
+    gen(rv, d, n) = [rv[1:3] + cosd(360*(k-1)/n) * a3 * d + sind(360*(k-1)/n) * a2 * d for k in 1:n]
+    V6 = polygon_vertices(rv, (; R_polygon = 6.378, n_vertices = 6))
+    G6 = gen(rv, 6.378, 6)
+    @test V6 != G6                                   # they are NOT bitwise equal...
+    @test maximum(maximum(abs.(V6[k] - G6[k])) for k in 1:6) < 1e-9   # ...but agree physically
+
+    # a finer action set still reaches its vertices (A3 must survive the ablation) and
+    # still produces a well-posed LP
+    p12, pl12, _ = init_game(MersenneTwister(5); n_vertices = 12)
+    @test p12.n_vertices == 12
+    @test size(pl12[1].cost) == (12, 12)
+    @test length(pl12[1].fp_belief) == 12
+    @test count(x -> x isa Int, pl12[1].tracked_strategies) == 12
+    @test maximum(r.miss for r in pl12[1].solve_info.traj) < 0.5 * p12.R_polygon
+    s12 = solve_mixed_nash(pl12[1].cost)
+    @test s12.cert_violation < 1e-8
+    @test isapprox(sum(s12.x), 1; atol = 1e-8) && isapprox(sum(s12.y), 1; atol = 1e-8)
+
+    # the results layout separates arities but leaves the historical n=6 paths untouched
+    @test results_folder(30, "mixed", "mixed", 6)  == "test/results/n30/p1_mixed_p2_mixed/"
+    @test results_folder(30, "mixed", "mixed", 12) == "test/results/n30_v12/p1_mixed_p2_mixed/"
+end
+
+@testset "results layout encodes every swept knob (no silent overwrites)" begin
+    # Two near-misses that would each have destroyed data: a 12-vertex run landing on the
+    # 6-vertex Gate B cells, and three γ values of the C1 sweep landing on each other AND
+    # on Gate B's FP_greedy cells. Every knob that changes the numbers must change the path.
+    base = results_folder(30, "FP_greedy", "mixed")
+    @test base == "test/results/n30/p1_FP_greedy_p2_mixed/"          # defaults: historical path
+    for (kw, want) in ((Dict(:γ_fp => 0.5),     "n30_g0.5"),
+                       (Dict(:γ_fp => 0.9),     "n30_g0.9"),
+                       (Dict(:η_hedge => 0.5),  "n30_e0.5"))
+        p = results_folder(30, "FP_greedy", "mixed"; kw...)
+        @test occursin(want, p)
+        @test p != base
+    end
+    # arity and γ compose, and every combination is distinct
+    paths = [results_folder(30, "FP_greedy", "mixed", n; γ_fp = g)
+             for n in (6, 12, 24), g in (1.0, 0.5, 0.9)]
+    @test length(unique(paths)) == length(paths)
 end
 
 @testset "frozen-matrix FP converges to the LP equilibrium" begin

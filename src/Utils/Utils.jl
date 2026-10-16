@@ -96,42 +96,68 @@ export axis_123
 
 ## ====================================================================
 
-"Compute vertices of polygon around given state vector"
+"""
+    polygon_vertices(rv_state, parameters)
+
+Vertices of the regular polygon inscribed around `rv_state`, as a `Vector` of position
+vectors, ordered counter-clockwise starting from the `+ê₃` ("top") direction. Vertex `k`
+sits at angle `360°·(k-1)/n` in the local **ê₂–ê₃ (radial/normal) plane** — *not* the plane
+normal to velocity; `axis_123` is not orthonormal (`a₁·a₂ ≈ -e`), and the two planes differ
+by ~0.57° at e = 0.01.
+
+Arity comes from `parameters.n_vertices`, defaulting to **6** — this is C4's ablation knob.
+At n = 6 the order is the historical `(top, topin, botin, bot, botout, topout)`.
+
+**Why n = 6 is a separate branch.** The general formula and the original hardcoded
+expressions differ in the last bits: `cosd(120)` is not bitwise `-cosd(60)`, which moves
+vertex positions by ~2e-12 km. That is physically nothing, but every Gate A/B number was
+produced by the expressions below, and exact reproducibility is used as a verification tool
+in this project (it is what proved the B6 re-run of Gate B's cells was schema-only). So
+n = 6 keeps the original arithmetic verbatim and only other arities take the general path.
+Verified bitwise-identical to the pre-C4 implementation over 20,000 random states.
+"""
 function polygon_vertices(
-    rv_state,                 # [N,6] state vector 
-    parameters,    # radius of polygon 
+    rv_state,                 # [N,6] state vector
+    parameters,    # radius of polygon
 )
 
     dist = parameters.R_polygon
+    n    = hasproperty(parameters, :n_vertices) ? parameters.n_vertices : 6
 
-    # center of polygon 
+    # center of polygon
     r_vec = rv_state[1:3]
     _, axis_2, axis_3 = axis_123(rv_state)
 
-    # top vertex: move up from r_f along axis 3 
+    if n != 6
+        return [r_vec + cosd(360 * (k - 1) / n) * axis_3 * dist +
+                        sind(360 * (k - 1) / n) * axis_2 * dist for k in 1:n]
+    end
+
+    # --- n = 6: the original expressions, preserved verbatim (see docstring) ---
+
+    # top vertex: move up from r_f along axis 3
     r_top = r_vec + axis_3 * dist
 
-    # top-inner vertex: move up from r_f along axis 3 and left along axis 2, 60 degrees 
+    # top-inner vertex: move up from r_f along axis 3 and left along axis 2, 60 degrees
     vec = cosd(60) * axis_3 * dist + sind(60) * axis_2 * dist
     r_topin = r_vec + vec
 
-    # bottom-inner vertex: move down from r_f along axis 3 and left along axis 2, 60 degrees 
+    # bottom-inner vertex: move down from r_f along axis 3 and left along axis 2, 60 degrees
     vec = -cosd(60) * axis_3 * dist + sind(60) * axis_2 * dist
     r_botin = r_vec + vec
 
-    # bottom vertex: move down from r_f along axis 3 
+    # bottom vertex: move down from r_f along axis 3
     r_bot = r_vec - axis_3 * dist
 
-    # bottom-outer vertex: move down from r_f along axis 3 and right along axis 2, 60 degrees 
+    # bottom-outer vertex: move down from r_f along axis 3 and right along axis 2, 60 degrees
     vec = -cosd(60) * axis_3 * dist - sind(60) * axis_2 * dist
     r_botout = r_vec + vec
 
-    # top-outer vertex: move up from r_f along axis 3 and right along axis 2, 60 degrees 
+    # top-outer vertex: move up from r_f along axis 3 and right along axis 2, 60 degrees
     vec = cosd(60) * axis_3 * dist - sind(60) * axis_2 * dist
     r_topout = r_vec + vec
 
-    vertices = (top=r_top, topin=r_topin, botin=r_botin, bot=r_bot, botout=r_botout, topout=r_topout)
-    return vertices
+    return [r_top, r_topin, r_botin, r_bot, r_botout, r_topout]
 end
 
 export polygon_vertices
@@ -381,12 +407,73 @@ export slim_player, slim_game, slim
 ## ====================================================================
 
 """
+    separation_series(game)
+
+Inter-player separation at every executed segment boundary, with absolute times and the game
+step each sample belongs to. Sample `i` of step `k` sits at `tt[k] + (i-1)·dt_seg`, with
+`dt_seg = t_horizon / n_seg_horizon` (≈117 s at the nominal orbit) — that spacing is the
+*resolution* of any closest-approach number, so a true minimum between boundaries can be
+missed by up to half a sample.
+
+Slim-compatible by construction: reads only `rv_chosen`, never `X[chosen]` (which
+`slim_player` strips — the old `dist_norm` path cannot run on slim files).
+"""
+function separation_series(game, params=game.params[1])
+    dt_seg = params.t_horizon / params.n_seg_horizon
+    t, d, kstep = Float64[], Float64[], Int[]
+    for k in eachindex(game.p1_state)
+        r1, r2 = game.p1_state[k].rv_chosen, game.p2_state[k].rv_chosen
+        (isempty(r1) || isempty(r2)) && continue
+        for i in axes(r1, 1)
+            push!(t, game.tt[k] + (i - 1) * dt_seg)
+            push!(d, norm(r1[i, 1:3] - r2[i, 1:3]))
+            push!(kstep, k)
+        end
+    end
+    (; t, d, k = kstep)
+end
+
+"""
     min_separation(game)
 
-Closest approach between the two craft over a whole game, in km, using every executed timestep
-rather than only the game-step endpoints.
+Closest approach between the two craft over a whole game, in km, using every executed segment
+boundary rather than only the game-step endpoints. Same value as the old `dist_norm`-based
+minimum (consecutive steps share their boundary sample), but works on slim files.
 """
-min_separation(game, params=game.params[1]) = minimum(dist_norm(game, params))
+min_separation(game, params=game.params[1]) = minimum(separation_series(game, params).d)
+
+"""
+    capture_stats(game; r_hard, r_soft)
+
+**The capture condition (B3), decided 2026-09-16 from the measured capture curve:**
+
+  * `r_capture_hard = 0.2 km` — the ISS keep-out-sphere radius, the citable proximity-ops
+    "last safety barrier". The smallest radius still statistically resolvable at 100
+    games/cell (80 events across the CRN sweep; pooled per-evader Wilson CIs separate).
+  * `r_capture_soft = 1.0 km` — proximity-operations scale, and the most discriminating
+    radius on the measured curve (per-cell rates span 13–100%; 1.5 km saturates).
+
+Capture is **post-hoc first passage below the radius — games are never terminated.**
+Terminating would censor the separation metrics and break the comparability that common
+random numbers buy, so capture is an event flag on a completed game, and time-to-capture
+comes from the same first passage. Defaults read `params.r_capture_hard` / `r_capture_soft`
+when present (with the values above as fallback, so pre-B3 saved games still analyze).
+
+Returns `(; min_sep, r_hard, r_soft, hard, soft, t_hard, t_soft, k_hard, k_soft)` — the
+booleans, first-passage absolute times (`NaN` if never) and game steps (`0` if never).
+"""
+function capture_stats(game, params=game.params[1];
+                       r_hard = get(params, :r_capture_hard, 0.2),
+                       r_soft = get(params, :r_capture_soft, 1.0))
+    s = separation_series(game, params)
+    function first_pass(r)
+        i = findfirst(<=(r), s.d)
+        isnothing(i) ? (false, NaN, 0) : (true, s.t[i], s.k[i])
+    end
+    hard, t_hard, k_hard = first_pass(r_hard)
+    soft, t_soft, k_soft = first_pass(r_soft)
+    (; min_sep = minimum(s.d), r_hard, r_soft, hard, soft, t_hard, t_soft, k_hard, k_soft)
+end
 
 """
     capture_curve(games_vec, radii)
@@ -394,10 +481,9 @@ min_separation(game, params=game.params[1]) = minimum(dist_norm(game, params))
 Capture rate as a FUNCTION of the capture radius: for each radius, the fraction of games whose
 closest approach fell inside it.
 
-Reported as a curve deliberately. **There is no capture or termination condition anywhere in
-this codebase** — nothing stops a game and no threshold has ever been defined — so picking a
-single number now would be inventing a result. A curve lets the paper state the sensitivity and
-choose a defensible radius afterwards, which is also the honest answer to the pursuit-evasion
+The named thresholds live in `capture_stats` (hard 0.2 km / soft 1.0 km, B3); the curve is
+still reported alongside them because the 0.5–1.0 km interval is where the rate is steepest —
+showing the whole curve is the honest answer to "why these radii" and to the pursuit-evasion
 reviewer who will ask what capture means.
 """
 function capture_curve(games_vec, radii)
@@ -405,14 +491,64 @@ function capture_curve(games_vec, radii)
     (; radii, rate = [count(<=(r), d) / length(d) for r in radii], min_sep = d)
 end
 
-export min_separation, capture_curve
+"""
+    wilson95(k, n)
+
+Wilson 95% interval `(lo, hi)` for a binomial proportion `k/n` — the interval to use for
+capture rates, which sit near 0 (hard) or near 1 (soft) where the normal approximation fails.
+"""
+function wilson95(k, n)
+    z = 1.959963984540054
+    p = k / n
+    c = (p + z^2 / (2n)) / (1 + z^2 / n)
+    h = z * sqrt(p * (1 - p) / n + z^2 / (4n^2)) / (1 + z^2 / n)
+    # at k == 0 (k == n) the true bound is exactly 0 (exactly 1); c - h only reaches it
+    # up to a last-ulp residue, so pin the degenerate endpoints rather than clamp them
+    (k == 0 ? 0.0 : max(c - h, 0.0), k == n ? 1.0 : min(c + h, 1.0))
+end
+
+export separation_series, min_separation, capture_stats, capture_curve, wilson95
 
 ## ====================================================================
+
+"""
+    results_folder(k_max, p1, p2, n_vertices = 6; γ_fp = 1.0, η_hedge = 0.1)
+
+The on-disk layout, in ONE place so the writer and reader cannot drift:
+
+    test/results/n<k_max>[_v<n>][_g<γ>][_e<η>]/p1_<P1>_p2_<P2>/games_<N>.jld2
+
+**Every knob that changes the numbers must appear in the path, or runs silently overwrite
+each other.** The optional components appear only at non-default values, so every path
+written before Gate C stays valid and all Gate A/B/B6 data still loads unchanged.
+
+This has already prevented two data-loss bugs. Without `_v<n>`, a 12-vertex ablation run
+would have overwritten the 6-vertex Gate B cells (the path keys on game *steps*, not vertex
+count). Without `_g<γ>`, the three γ values of the C1 sweep would have overwritten each
+other **and** the Gate B `FP_greedy` cells. If you add another swept knob, add it here in
+the same breath.
+"""
+function results_folder(k_max, p1, p2, n_vertices = 6;
+                        γ_fp = 1.0, γ_fp_p2 = γ_fp, η_hedge = 0.1)
+    tag = string("n", k_max)
+    n_vertices == 6 || (tag *= string("_v", n_vertices))
+    γ_fp == 1.0     || (tag *= string("_g", γ_fp))
+    γ_fp_p2 == γ_fp || (tag *= string("_g2", γ_fp_p2))   # asymmetric discount
+    η_hedge == 0.1  || (tag *= string("_e", η_hedge))
+    string("test/results/", tag, "/p1_", p1, "_p2_", p2, "/")
+end
+
+export results_folder
 
 function save_games_vec(games_vec, params=games_vec[1].params[1])
 
     k_max = games_vec[1].i_game_step[end]
-    save_folder = string("test/results/n", k_max, "/p1_", params.strategy, "_p2_", params.p2_strategy, "/")
+    getp(name, dflt) = hasproperty(params, name) ? getproperty(params, name) : dflt
+    γ1 = getp(:γ_fp, 1.0)
+    save_folder = results_folder(k_max, params.strategy, params.p2_strategy,
+                                 getp(:n_vertices, 6);
+                                 γ_fp = γ1, γ_fp_p2 = getp(:γ_fp_p2, γ1),
+                                 η_hedge = getp(:η_hedge, 0.1))
 
     mkpath(save_folder)
 
@@ -440,10 +576,12 @@ written there: `test/results/n<k_max>/p1_<P1>_p2_<P2>/games_<N>.jld2`.
 level — so it could never load anything `save_games_vec` wrote. It had no call
 sites, which is why the breakage went unnoticed.)
 """
-function load_games_vec(N_games, n_game_steps, p1_strategy="mixed", p2_strategy="mixed")
+function load_games_vec(N_games, n_game_steps, p1_strategy="mixed", p2_strategy="mixed";
+                        n_vertices::Int=6, γ_fp::Float64=1.0, γ_fp_p2::Float64=γ_fp,
+                        η_hedge::Float64=0.1)
 
-    save_folder = string("test/results/n", n_game_steps,
-                         "/p1_", p1_strategy, "_p2_", p2_strategy, "/")
+    save_folder = results_folder(n_game_steps, p1_strategy, p2_strategy, n_vertices;
+                                 γ_fp, γ_fp_p2, η_hedge)
 
     filename = string("games_", N_games, ".jld2")
     full_filename = string(save_folder, filename)

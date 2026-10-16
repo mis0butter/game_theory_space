@@ -205,28 +205,43 @@ standard error**. Rule: **no number enters a table without an interval.**
 ### 4.5 Metrics
 
 Mean and late-game separation; total ΔV per player (separate from payoff); minimum
-inter-player separation and **capture rate as a curve over candidate radii** (no single radius
-is baked in yet — §6); per-step exploitability / NashConv of played strategies; LP certificate
-residuals; solver convergence rate.
+inter-player separation and **hard/soft capture** (first passage below 0.2 km / 1.0 km, §5.5,
+with the full radius curve reported alongside) plus time-to-first-capture; per-step
+exploitability / NashConv of played strategies; LP certificate residuals; solver convergence
+rate.
 
-### 4.6 Planned (Gate C)
+### 4.6 The workstream gates
 
-- **C1 — recency-weighted FP:** `f_s = γ·f_{s−1} + g_{s−1}`, γ = 1 recovering uniform FP;
-  effective memory 1/(1−γ). The argument: uniform pooling averages over *different* games.
-- **C2 — no-regret learner:** regret matching and/or Hedge — the AAMAS-expected baseline, and
-  dynamic-regret bounds exist for time-varying games, which upgrades C3's tracking claim.
-- **C3 — FP convergence, honestly split:** (i) frozen-matrix sanity check where Robinson
-  applies; (ii) time-varying **tracking** — measure ‖A_{s+1} − A_s‖ and bound the
-  exploitability gap by the variation budget. Do not claim Robinson applies to (ii).
-- **C4 — vertex ablation 6/12/24** (fallback 6/12/18): the lifted value should stabilize as
-  the action set refines. Four hardcoded arity-6 sites to generalize first.
-- **C5 — lifting proposition:** restricting a maximizer's actions can only lower the value; a
-  Lipschitz stage cost over a δ-net of the reachable set gives `|V_M − V_cont| ≤ L·h_M`. C4
-  supplies the empirical curve; together, the answer to Reviewer 5 #4.
+Work is organized into four gates. This is the project's skeleton — **the definitions below
+are authoritative**; `docs/README_plan.md` §4 holds the original longer-form spec for
+provenance only and is not maintained.
+
+| Gate | What it is | Status |
+|---|---|---|
+| **A** | **Correctness + existential diagnostics.** Fix the defects that would invalidate any number (the LP sign inversion, the stage cost, the trajectory solver, the AD path), and settle the existential question of whether candidates actually reach their vertices. A1–A6. | ✅ **complete 2026-08-31** |
+| **B** | **The honest re-run.** Real Monte Carlo with dispersed ICs, slim persistence, the full 5×5 tournament with intervals and a valid paired test, the EGTA meta-game, a capture condition, and the oracle best-response ceiling. B1–B6. | ✅ **complete 2026-09-16** |
+| **C** | **The contribution.** The methodological content that makes this a paper rather than a corrected replication: a better learner, the AAMAS-expected baseline, an honest convergence claim, and the lifting made rigorous. C1–C5, below. | ⬜ **current** |
+| **D** | **Writing support.** Deliver prose as markdown, tables as CSV with intervals, figures as PDF. Anonymized supplementary (≤25 MB, author names and git history stripped — the repo is public and identifiable). | ⬜ Sep 21 – Oct 8 |
+
+**Narrative locked at the end of Gate B.** Gate C adds to the story; it should not require
+re-opening the numbers in §5. If a Gate C result contradicts one, that is a finding to
+report, not a reason to silently re-run Gate B.
+
+#### Gate C — the contribution
+
+- **C1 — recency-weighted FP.** ✅ **Complete 2026-09-17** — §5.9. Implemented with per-player
+  γ; the operative condition turned out to be *systematic* drift, not mere movement.
+- **C2 — no-regret learner.** ✅ **Complete 2026-09-17** — §5.9. Regret matching and Hedge;
+  competitive but not dominant, and the gap appears against a best-responder.
+- **C3 — FP convergence, honestly split.** ✅ **Complete 2026-09-17** — §5.9. Frozen-matrix
+  convergence holds at `T^-0.56`; the time-varying case is a *tracking* result with a flat
+  ~0.25 km gap, and FP's success is **not** explained by equilibrium tracking.
+- **C4 — vertex ablation 6/12/24.** ✅ **Complete 2026-09-17** — results in §5.9.
+- **C5 — lifting proposition.** Statement and empirical constant in §5.9.
 - **B6 — oracle best-response pursuer** vs fixed-vertex evaders: (oracle − Nash) = the price
   of safety; (FP vs oracle) = fraction of available exploitation recovered online, the stand-in
   for a MARL baseline; (oracle across vertices) = per-vertex security values, the clean
-  geometry number. Blocked on the capture radius.
+  geometry number. **Complete 2026-09-16** — results in §5.7.
 
 **Decided against (do not relitigate):** a MARL baseline for this deadline (12 NLPs per
 environment step makes 10⁵–10⁶ training steps require a surrogate that is then not this
@@ -273,13 +288,32 @@ support: `greedy` 0.830 / `FP_greedy` 0.170. Pursuer support: `mixed` 0.449 / `F
 membership: `FP_greedy` is in the support on both sides and pure for neither. The meta-game
 itself says exploitation is worth playing and worth not playing exclusively.
 
-### 5.5 Capture (open: the radius)
+### 5.5 Capture — two-level, decided 2026-09-16
 
-No capture condition exists in the code yet; capture is reported as a curve over radii
-(0.1–2 km, LOG 2026-09-02). Minimum separations run 9 m–229 m; the curve is steepest in
-0.5–1.0 km, exactly where the radius choice changes conclusions. Notable: `FP_greedy` evader
-vs `random` pursuer is the outlier (13% at 1 km vs 55–100% elsewhere) — an unpredictable
-opponent defeats the modeling, the honest counterpoint to the headline.
+Capture is **post-hoc first passage** of the inter-player separation below a radius — games
+are never terminated (termination would censor the separation metrics and break CRN
+comparability). Two named thresholds, both measured against the full capture curve before
+being chosen:
+
+- **Hard capture, 0.2 km** — the ISS keep-out-sphere radius, the citable proximity-ops "last
+  safety barrier," and the smallest radius still statistically resolvable at n=100/cell
+  (80 events across the sweep; pooled per-evader Wilson CIs separate `greedy` 1.6% [0.8, 3.1]
+  from `FP_greedy` 6.8% [4.9, 9.4]).
+- **Soft capture, 1.0 km** — proximity-operations scale, and the most discriminating radius
+  on the curve (per-cell rates span 13–100%; 1.5 km saturates). Pooled: `mixed` evader
+  soft-captured 86.2% [82.9, 88.9] vs `FP_greedy` 62.6% [58.3, 66.7].
+
+**The `FP_greedy`/`FP_greedy` cell is an extreme hard-capture outlier: 18% vs ≤ 9% in every
+other cell** (14% already at 0.15 km; the sweep-wide minimum separation of 9 m is in that
+cell). Mutual exploitation doesn't just lose mean separation — it courts hard capture at
+~2.5× the rate of any other matchup. That is the sign-reversal headline restated in capture
+terms. The other notable cell: `FP_greedy` evader vs `random` pursuer resists soft capture
+(13% at 1 km vs 55–100% elsewhere) — an unpredictable opponent defeats the modeling, the
+honest counterpoint to the headline.
+
+The full curve (0.1–2 km) is still reported alongside both thresholds: it is steepest in
+0.5–1.0 km, and showing it is the honest answer to "why these radii." Minimum separations
+run 9 m–229 m; sampling resolution is one segment boundary (~117 s), stated with the metric.
 
 ### 5.6 Solver characterization (what CDC asked for)
 
@@ -288,11 +322,170 @@ opponent defeats the modeling, the honest counterpoint to the headline.
 correct end to end. Every CDC-era number is void (D1 alone made 53% of its LP solves
 non-equilibria); no reconciliation is attempted.
 
-### 5.7 Negative results kept deliberately
+### 5.7 The exploitation ceiling — both ends of the tradeoff (B6)
 
-- The vertex-geometry "confound" (in-plane vs out-of-plane) **did not replicate** at n=6
-  after being claimed at n=2 — there is real per-vertex spread (~25% of the mean) but no
-  stable ordering. Re-measured properly under B6's oracle pursuer.
+An **oracle best-response** pursuer is told the evader's true decision rule and best-responds
+exactly (it knows a randomizer's *distribution*, never its realization — informed, not
+clairvoyant). It is not a realistic player; it is a **ceiling** on how much any pursuer could
+extract. Run against fixed-vertex evaders — the most exploitable opponent that exists — it
+brackets the whole tradeoff:
+
+**Against a predictable opponent, modeling ≈ omniscience, and safety costs everything.**
+The Nash pursuer gives up **+3.16 to +3.31 km** versus the oracle (t = 94–110, paired) —
+about 130% of the oracle's own value. In capture terms: the oracle and `FP_greedy` both
+hard-capture **100%** of fixed-vertex evaders; Nash hard-captures **0–9%**. And `FP_greedy`
+recovers **97.5–99.4%** of the available exploitation, converging fast — it plays the
+oracle's exact move 75% of the time in steps 1–5 and **100% from step 6 onward**. The gap
+between learning an opponent from observation and being handed the answer is 20–83 metres.
+
+**Against a properly randomizing opponent, omniscience is worth less than nothing.** Versus a
+`mixed` evader the contrast **reverses**: −0.117 ± 0.060 km (t = −3.82). The oracle does
+*worse* than Nash, and `FP_greedy` beats both. Knowing the true distribution buys nothing
+when there is nothing to exploit, and committing to a myopic best response to it actively
+hurts over 30 steps. This is the security strategy doing exactly its job — and it is the same
+sign reversal as §5.3, arriving independently at the opposite extreme of the opponent space.
+
+**Method caveat, stated plainly:** the oracle is a **greedy best response to the opponent's
+true per-step distribution**, not a 30-step optimum. A dynamic-programming pursuer could
+sacrifice now to set up a better capture later, so the price of safety above is a *lower
+bound*. Never describe it as "the optimal pursuer."
+
+### 5.8 The lifting is faithful *and* nearly converged at six vertices (C4 + C5)
+
+§5.1 established that candidate trajectories reach their vertices (median miss 4.1 cm against
+R = 6.378 km), so the finite action set is real. C4/C5 answer the harder question: is the
+*hexagon* — six vertices specifically — enough?
+
+**The proposition (C5).** Restricting a maximizer's action set can only lower the value of a
+zero-sum game, and restricting a minimizer's can only raise it, so each lifting is a bound on
+the continuous game in a known direction. Quantitatively, if the stage cost is Lipschitz with
+constant `L` over the reachable set and the vertex set is an `h_M`-net of the polygon's
+circumcircle, then
+
+    |V_M − V_cont| ≤ L · h_M,       h_M = 2R·sin(π/2M)
+
+`h_M` halves each time `M` doubles: 3.30 km at M = 6, 1.67 at 12, 0.83 at 24.
+
+**The measurement (C4).** The per-step LP value of the lifted stage game, 100 trials × 30
+steps per arity, under common random numbers so the arities are *paired*:
+
+| M | h_M [km] | V_M [km] | distance to extrapolated V_cont |
+|---|---|---|---|
+| 6 | 3.302 | 2.1057 ± 0.0263 | 0.0315 km (**1.5%**) |
+| 12 | 1.665 | 2.0869 ± 0.0264 | 0.0127 km (0.6%) |
+| 24 | 0.834 | 2.0806 ± 0.0263 | 0.0063 km (0.3%) |
+
+Successive differences shrink by a factor of **0.34** per doubling — *faster* than the 0.50
+the `O(h_M)` bound predicts, so the bound holds with room to spare. Richardson extrapolation
+on the model `V_M = V_cont + C·h_M` gives **V_cont ≈ 2.074 km** and an empirical Lipschitz
+constant of **L ≈ 0.008 km per km** of covering radius.
+
+**The claim this licenses.** The hexagon is not an arbitrary discretization: quadrupling the
+action set moves the game's value by 1.2%, and the six-vertex value is already within ~1.5%
+of the extrapolated continuum. The safety claim of §5.2–5.3 is therefore about a game that
+differs from the continuous one by about a percent in value — which is the answer to
+Reviewer 5 #4, and it is a measurement rather than an assertion.
+
+**A directional detail worth one sentence.** V *decreases* with refinement. Both players gain
+actions simultaneously, so the monotonicity argument does not fix the sign a priori; observing
+V₂₄ < V₁₂ < V₆ says the **pursuer gains slightly more from a finer action set than the evader
+does**. Small (1.2% total) but consistent across all three arities.
+
+**And the headline is not a coarse-lattice artifact — it strengthens under refinement:**
+
+| M | `FP_greedy` edge over the Nash evader |
+|---|---|
+| 6 | +0.735 ± 0.083 km (t = 17.3) |
+| 12 | +0.858 ± 0.084 (t = 20.1) |
+| 24 | +0.931 ± 0.070 (t = 25.9) |
+
+A finer action set gives a predictable opponent more ways to be exploited and the learner more
+to learn, so online opponent modeling gains 27% more from M = 6 to M = 24. Pre-empts the
+obvious reviewer question with data in the right direction. (LP certificates stay at 1.7e-12
+even on the 24×24 games, so none of this is solver drift.)
+
+### 5.9 What makes fictitious play work here — and what does not (C1, C2, C3)
+
+Three Gate C results sharpen the method section, and the first is a correction to an
+assumption the paper would otherwise have made silently.
+
+**FP does not track the equilibrium (C3).** The stage game moves fast: the payoff matrix
+changes 18.5% of its norm per step, and the equilibrium *mixture* moves 1.359 in L1 per step
+out of a maximum 2.0, with the modal vertex changing **82% of the time**. The mechanism is
+measured, not speculated: equilibrium support is broad (median 4 of 6, never pure) and the
+supported vertices are exactly indifferent (median best-vs-second gap 0.00%), so the mixture
+is weakly determined and small perturbations reshuffle it while the *value* barely moves
+(0.131 km/step). Realized FP-vs-FP play sits at ~0.25 km exploitability, **flat across all 30
+steps** — it never converges on the equilibrium.
+
+So the assumption that licenses pooling beliefs across steps is **not** "the stage equilibrium
+is stable" — that is measured false. It is the weaker and more defensible **"the opponent's
+decision rule is stable."** B6 corroborates from the other side: FP's edge is maximal against
+a fixed-vertex opponent (a perfectly stable rule) and reverses against another exploiter (no
+stable rule). On a frozen matrix — Robinson's actual setting — FP does converge to the LP
+equilibrium at an empirical `T^-0.56`, essentially the textbook rate; that is the only regime
+where we invoke the theorem.
+
+**Discounting needs systematic drift, not mere movement (C1).** Recency-weighted FP
+(`f_s = γ·f_{s-1} + g_{s-1}`) was expected to help because uniform pooling averages across
+different games. It does — but only under a sharper condition than "the opponent moves":
+
+| evader `FP_greedy` vs | γ=1.0 | γ=0.9 | γ=0.8 | γ=0.5 |
+|---|---|---|---|---|
+| `mixed` (unpredictable churn) | 5.716 | 5.739 | 5.691 | 5.686 — **all null** |
+| `FP_greedy` (systematic drift) | 4.614 | 4.939* | 5.319* | **6.007*** |
+
+Against `mixed`, whose mixture churns hard but *unpredictably*, discounting buys nothing at
+any γ. Against `FP_greedy`, whose distribution drifts systematically as its own beliefs
+accumulate, the gain is large and monotone in memory length. **The operative condition is
+predictable drift.** (The `FP_greedy` column discounts both players, so it measures mutual
+memory; the one-sided decomposition is a separate run.)
+
+A deliberate falsification check — γ against a *fixed-vertex* evader, where nothing should be
+learnable — returned a small but significant effect (−0.019 km at γ=0.5, t = −4.30) and the
+investigation improved the claim. Discounting decays the `ones(n)` **uniform prior** far
+faster (belief mass on the true vertex reaches 1.000 by step 11 at γ=0.5, versus 0.824 after
+30 steps at γ=1), but from step 4 onward every γ plays *identically*, because the best
+response depends on which vertex holds plurality rather than how much. The entire 0.7% effect
+lives in steps 1–3. So the honest statement is that discounting helps when there is genuinely
+stale information — **a systematically drifting opponent, or the initial prior** — and the
+prior is a modelling choice that interacts with γ.
+
+**A no-regret learner is competitive, not dominant (C2).** Regret matching (parameter-free)
+and Hedge, as evaders:
+
+| evader | vs `mixed` | vs `FP_greedy` | vs `oracle` (best-responder) |
+|---|---|---|---|
+| `mixed` | 4.981 | 4.868 | **5.098** |
+| `regret_matching` | 5.402 | 4.731 | 4.575 |
+| `hedge` | 4.923 | 4.622 | 4.504 |
+
+Neither beats `FP_greedy` overall (−0.314 and −0.793 against a `mixed` pursuer; +0.118 and
++0.009 against an FP pursuer). The interesting column is the last one: **against a
+best-responding opponent the stage-game security strategy beats both learners.** That is the
+no-regret guarantee's scope made concrete — it bounds the *time-average*, while minimax bounds
+*each step*, and an opponent that best-responds to the learner's current mixture exploits
+precisely that gap. Given C3's finding that the equilibrium reshuffles 82% of steps, the
+time-average is not the object that matters here, which is why the AAMAS-standard baseline
+does not win.
+
+*Caveat to state explicitly:* regret matching is parameter-free, so its result is
+unconditional; Hedge's depends on a learning rate, and η is swept rather than assumed.
+
+### 5.10 Negative results kept deliberately
+
+- The vertex-geometry "confound" was claimed at n=2, failed to replicate at n=6, and B6 now
+  resolves it at n=100 — in a way that corrects the retraction too. On **whole-game mean**
+  the six vertices are statistically indistinguishable under the oracle (3.3% spread, CIs
+  covering the full range), so note [f]'s surviving claim that "~25% spread means which
+  vertex you play matters" was *itself* six-seed noise. But on **late-game** separation a
+  clean split appears, with non-overlapping CIs: out-of-plane vertices (0.038, 0.046 km) are
+  **~2.9× more exploitable** than in-plane ones (0.109–0.129 km). Under a Nash pursuer that
+  same comparison is noise. **The in-plane/out-of-plane effect is real but only visible
+  against an opponent that actually exploits** — which is exactly why the original
+  Nash-based design produced an unstable ranking. Caveat: all these values sit below the
+  0.2 km hard-capture radius, so geometry sets how deeply inside capture the evader ends
+  up, not whether it escapes.
 - Ipopt fails on the trajectory NLP (0% convergence) — reported as a comparison, which
   answers the solver question better than either result alone.
 - The ΔV cap never binds at this scenario scale; the fuel term contributes 0% of the payoff
@@ -300,14 +493,17 @@ non-equilibria); no reconciliation is attempted.
 
 ## 6. Open items and schedule
 
-| When | What |
-|---|---|
-| now | **Pick the capture radius** (B3; the 0.5–1.0 km knee is the sensitive zone — justify the choice, e.g. by a physical docking/inspection distance, and show the curve regardless) |
-| then | **B6** oracle best-response runs (≥20 seeds, CIs) |
-| Sep 14–20 | Gate C: C1–C5 |
-| Sep 21–30 | Writing support, figures, abstract draft |
-| Oct 1 | Abstract deadline (title/authors lock) |
-| Oct 8 | Paper deadline |
+| When | What | |
+|---|---|---|
+| ~~Aug 31~~ | Gate A — A1–A6 | ✅ done |
+| ~~Sep 1–16~~ | Gate B — B1–B6 (B3 capture radius and B6 oracle both closed Sep 16) | ✅ done, **narrative locked** |
+| **Sep 17 – 20** | **Gate C — C1–C5** (§4.6) | ⬜ **current** |
+| Sep 21–30 | Gate D — writing support, figures, abstract draft | ⬜ |
+| Oct 1 | Abstract deadline (title and authors lock) | |
+| Oct 8 | **Paper deadline** | |
+
+Gate C started three days behind the original Sep 14 plan, absorbed by Gates A and B finishing
+early and by B3/B6 landing together. The Oct 1 abstract remains the binding constraint.
 
 **Drop order if the calendar slips:** `Meta_*` promotion → 24-vertex ablation (keep 6/12) →
 no-regret learner (keep discounted FP) → EGTA. **Never cut:** the sign fix, the miss-distance

@@ -29,12 +29,17 @@ function game_metrics(g)
     dv1 = sum(sum(norm.(eachrow(g.p1_state[k].U_chosen))) for k in ks if !isempty(g.p1_state[k].U_chosen))
     dv2 = sum(sum(norm.(eachrow(g.p2_state[k].U_chosen))) for k in ks if !isempty(g.p2_state[k].U_chosen))
     nlast = max(1, length(sep) ÷ 4)
+    # Capture per B3: hard 0.2 km / soft 1.0 km, post-hoc first passage, no termination.
+    # capture_stats falls back to those values when params predates the radii, so this
+    # reads pre-B3 sweeps (like the Gate B data itself) unchanged.
+    cs = capture_stats(g)
     # `ic_key` fingerprints the realized initial condition (slim persistence keeps
     # params.ic). Identical fingerprints at the same game index across cells is what
     # common random numbers means, and it is what licenses the paired test.
     ic = g.params[1].ic
     (; mean_sep = mean(sep), late_sep = mean(sep[end-nlast+1:end]),
-       min_sep = minimum(sep), dv1, dv2,
+       min_sep = cs.min_sep, hard = cs.hard, soft = cs.soft,
+       k_hard = cs.k_hard, k_soft = cs.k_soft, dv1, dv2,
        ic_key = (ic.a_ratio, ic.dν_E, ic.dν_P, ic.dΩ_E, ic.dΩ_P))
 end
 
@@ -135,12 +140,59 @@ function main()
     println("  exceed 1 wherever the two cells share IC-driven variance; ~1.0 across the")
     println("  board means the pairing bought nothing, which is itself diagnostic.")
 
-    # ---------------------------------------------------------------- capture
+    # ------------------------------------------------------------ capture (B3)
+    #
+    # The capture condition: HARD = first passage below 0.2 km (ISS keep-out-sphere
+    # radius), SOFT = below 1.0 km (proximity-ops scale; the most discriminating radius
+    # on the measured curve). Post-hoc, no termination — see capture_stats. The curve is
+    # still shown so the thresholds don't read as cherry-picked.
     println("\n" * "="^78)
-    println("CAPTURE RATE vs RADIUS — there is still no capture condition in the code,")
-    println("so this is reported as a curve rather than a single invented threshold.")
+    println("B3 — CAPTURE.  hard = 0.2 km (ISS keep-out sphere), soft = 1.0 km.")
+    println("Post-hoc first passage; games are never terminated. n=$n per cell.")
     println("="^78)
-    radii = [0.1, 0.25, 0.5, 1.0, 2.0]
+    for (name, field) in (("HARD (0.2 km)", :hard), ("SOFT (1.0 km)", :soft))
+        @printf("\n%s capture count per cell:\n", name)
+        @printf("%-8s", "P1 \\ P2"); for p2 in STRATS; @printf("%7s", SHORT[p2]); end; println()
+        for p1 in STRATS
+            @printf("%-8s", SHORT[p1])
+            for p2 in STRATS; @printf("%7d", count(x -> getfield(x, field), M[(p1, p2)])); end
+            println()
+        end
+    end
+
+    println("\nPooled capture rate, Wilson 95% CI  (per evader / per pursuer, n = $(5n)):")
+    for (name, field) in (("hard", :hard), ("soft", :soft))
+        @printf("  %-5s evader : ", name)
+        for p1 in STRATS
+            v = vcat([M[(p1, p2)] for p2 in STRATS]...)
+            k = count(x -> getfield(x, field), v); lo, hi = wilson95(k, length(v))
+            @printf("%s %4.1f%% [%4.1f,%4.1f]  ", SHORT[p1], 100k/length(v), 100lo, 100hi)
+        end
+        println()
+        @printf("  %-5s pursuer: ", name)
+        for p2 in STRATS
+            v = vcat([M[(p1, p2)] for p1 in STRATS]...)
+            k = count(x -> getfield(x, field), v); lo, hi = wilson95(k, length(v))
+            @printf("%s %4.1f%% [%4.1f,%4.1f]  ", SHORT[p2], 100k/length(v), 100lo, 100hi)
+        end
+        println()
+    end
+
+    # time-to-soft-capture, among games that were soft-captured: how FAST a pursuer
+    # penetrates the 1 km zone, not just whether it ever does
+    println("\nMedian game step (of $NS) of first SOFT capture, captured games only:")
+    @printf("%-8s", "P1 \\ P2"); for p2 in STRATS; @printf("%7s", SHORT[p2]); end; println()
+    for p1 in STRATS
+        @printf("%-8s", SHORT[p1])
+        for p2 in STRATS
+            ks = [x.k_soft for x in M[(p1, p2)] if x.soft]
+            isempty(ks) ? @printf("%7s", "-") : @printf("%7.1f", median(ks))
+        end
+        println()
+    end
+
+    println("\nCapture rate vs radius (the sensitivity curve behind the thresholds):")
+    radii = [0.1, 0.2, 0.25, 0.5, 1.0, 2.0]
     @printf("%-22s", "matchup"); for r in radii; @printf("%9.2f", r); end; println("  km")
     for p1 in STRATS, p2 in STRATS
         p1 in ("mixed", "FP_greedy") || continue

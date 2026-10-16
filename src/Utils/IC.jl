@@ -43,6 +43,27 @@ function init_game(
     a_ratio_range   = (1.0045, 1.0055),   # nominal 1.005; +/-10% on the 35 km drift offset
     σ_ν             = 0.04 * pi / 180,    # ~5 km along-track, both craft
     σ_Ω             = 0.12 * pi / 180,    # ~5 km cross-track, both craft
+    # C4 vertex ablation: the size of the lifted action set. 6 is the historical hexagon
+    # and is bitwise-preserved (see polygon_vertices); 12 and 24 refine it. Cost scales
+    # roughly linearly -- each vertex is one more trajectory optimization per player per
+    # step -- and the LP becomes n x n.
+    n_vertices::Int = 6,
+    # C1 recency-weighted FP: f_s = γ·f_{s-1} + g_{s-1}. γ = 1 is plain fictitious play and
+    # is the default, so this changes no existing number. Effective memory 1/(1-γ) steps.
+    # See `update_beliefs!` for why uniform pooling is questionable here (C3's variation
+    # budget) and for what discounting should and should not be expected to fix.
+    γ_fp::Float64 = 1.0,
+    # Per-player discount. Defaults to γ_fp, so passing a single γ still discounts both
+    # players exactly as before. Set this separately to run the asymmetric experiment C1
+    # actually needs in a self-play cell: with both players discounting, FP vs FP is a
+    # symmetric perturbation and cannot say whether forgetting helps the evader.
+    γ_fp_p2::Float64 = γ_fp,
+    # C2 Hedge learning rate. The textbook choice for a known horizon T over n actions is
+    # sqrt(8 ln n / T); at T = 30, n = 6 that is ~0.62. Left at 0.1 by default because the
+    # payoffs here are separations in km (O(4), not O(1)), so the effective rate is η times
+    # the payoff scale. Sweep it rather than trusting the default. `regret_matching` takes
+    # no parameter at all, which is why it is the primary no-regret baseline.
+    η_hedge::Float64 = 0.1,
 )
 
     # orbit params
@@ -121,6 +142,19 @@ function init_game(
     λ1 = 1.0    # separation term
     λ2 = 0.0    # differential-fuel term; see above
 
+    # --- capture condition (B3, decided 2026-09-16 from the measured capture curve) ---
+    # Two-level, post-hoc: capture = first passage of the inter-player separation below r.
+    # Games are NEVER terminated — termination would censor the separation metrics and
+    # break the comparability common random numbers buy. See capture_stats in Utils.jl.
+    #   hard: 0.2 km = the ISS keep-out-sphere radius (citable proximity-ops grounding),
+    #         and the smallest radius still resolvable at 100 games/cell.
+    #   soft: 1.0 km = proximity-operations scale; the most discriminating radius on the
+    #         measured curve (per-cell rates span 13–100%; 1.5 km saturates).
+    # Hard sits well below the sensitive 0.5–1.0 km knee, soft at its top edge — the full
+    # curve is reported alongside both (capture_curve) so neither reads as cherry-picked.
+    r_capture_hard = 0.2
+    r_capture_soft = 1.0
+
     # game parameters
     params = (
         mu=mu,
@@ -138,6 +172,12 @@ function init_game(
         w_miss=w_miss,
         λ1=λ1,
         λ2=λ2,
+        r_capture_hard=r_capture_hard,
+        r_capture_soft=r_capture_soft,
+        n_vertices=n_vertices,
+        γ_fp=γ_fp,
+        γ_fp_p2=γ_fp_p2,
+        η_hedge=η_hedge,
         ic=ic
     )
 
@@ -146,12 +186,12 @@ function init_game(
     t_ref_E, rv_ref_E = prop_kepler_tof_Nseg(rv_0_E, zeros(params.n_seg_horizon, 3), params.n_seg_horizon, params.t_horizon / params.n_seg_horizon, params.mu)
 
     # save player state and control hists 
-    tracked_strategies = ["mixed", "greedy", "random", 1, 2, 3, 4, 5, 6]
+    tracked_strategies = ["mixed", "greedy", "random", (1:n_vertices)...]
     strategy_belief = ones(length(tracked_strategies)) / length(tracked_strategies)
-    # NOTE: ones(6) hardcodes the hexagon arity; see C4 (vertex ablation), which
-    # must also touch polygon_vertices, tracked_strategies above, and the cost
-    # matrix allocation in compute_cost_matrices.
-    p = player_struct(; fp_belief=ones(6), strategy_belief, tracked_strategies)
+    # C4: arity is now derived from `n_vertices` everywhere. The four sites that used to
+    # hardcode 6 were this one, `tracked_strategies` above, `polygon_vertices`, and the
+    # cost-matrix allocation in `compute_cost_matrices` (which already derived it).
+    p = player_struct(; fp_belief=ones(n_vertices), strategy_belief, tracked_strategies)
     players = [p, deepcopy(p)]
 
     players[1].rv_0_hist = rv_E_hist

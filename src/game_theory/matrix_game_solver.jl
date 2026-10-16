@@ -533,7 +533,7 @@ strategy, and keeps the oracle honest rather than clairvoyant.
 Each branch mirrors the corresponding branch of `choose_strategies!` exactly; if the two ever
 drift apart the oracle stops being an oracle, so they must be edited together.
 """
-function opponent_distribution(strategy, opp_idx, players, mixing_weights)
+function opponent_distribution(strategy, opp_idx, players, mixing_weights, params = nothing)
 
     p_opp = players[opp_idx]
     n     = length(mixing_weights[opp_idx])
@@ -541,6 +541,12 @@ function opponent_distribution(strategy, opp_idx, players, mixing_weights)
 
     if strategy isa Int
         return point(strategy)
+
+    elseif strategy in ("regret_matching", "hedge")
+        # C2 learners are stochastic but their mixture is a deterministic function of
+        # accumulated state, so an oracle CAN be told it -- same status as `mixed`: it
+        # knows the distribution, not the draw.
+        return normalize_simplex(learner_weights(strategy, p_opp, n, params))
 
     elseif strategy == "random"
         return fill(1 / n, n)
@@ -623,8 +629,14 @@ function choose_strategies!(players, mixing_weights, rng, params, game)
 
     elseif p1_strategy == "oracle"
         # told P2's true rule, best-respond exactly. P1 maximizes its own cost.
-        d = opponent_distribution(p2_strategy, 2, players, mixing_weights)
+        d = opponent_distribution(p2_strategy, 2, players, mixing_weights, params)
         chosen[1] = argmax(players[1].cost * d)
+
+    elseif p1_strategy in ("regret_matching", "hedge")
+        # C2: no-regret learners play their own distribution, so this samples rather
+        # than taking an argmax -- the guarantee is about the played mixture.
+        w = learner_weights(p1_strategy, players[1], length(mixing_weights[1]), params)
+        chosen[1] = sample(rng, ProbabilityWeights(w))
 
     elseif p1_strategy isa Int
         chosen[1] = p1_strategy
@@ -683,8 +695,12 @@ function choose_strategies!(players, mixing_weights, rng, params, game)
     elseif p2_strategy == "oracle"
         # told P1's true rule. players[2].cost = -A and d indexes P1's vertices, so the
         # transpose is required here for the same reason it is in the FP_* branches (D5).
-        d = opponent_distribution(p1_strategy, 1, players, mixing_weights)
+        d = opponent_distribution(p1_strategy, 1, players, mixing_weights, params)
         chosen[2] = argmax(players[2].cost' * d)
+
+    elseif p2_strategy in ("regret_matching", "hedge")
+        w = learner_weights(p2_strategy, players[2], length(mixing_weights[2]), params)
+        chosen[2] = sample(rng, ProbabilityWeights(w))
 
     elseif p2_strategy isa Int
         chosen[2] = p2_strategy
@@ -720,10 +736,125 @@ end
 ## ====================================================================
 
 """
-Update fictitious play belief based on the opponent's chosen vertex.
-Increments the count for the vertex the opponent actually chose.
+    learner_state!(p, n)
+
+Lazily initialize and return the persistent no-regret state for player `p`: cumulative
+regret and cumulative counterfactual payoff, one entry per vertex. Lives in
+`player_struct.learner_state`, which is carried across game steps (like the belief
+fields) and survives slim persistence.
 """
-function update_beliefs!(game, players)
+function learner_state!(p, n)
+    if p.learner_state === nothing
+        p.learner_state = (; regret = zeros(n), payoff = zeros(n))
+    end
+    p.learner_state
+end
+
+"""
+    learner_weights(strategy, p, n, params)
+
+The mixing distribution a no-regret learner plays this step.
+
+  * `regret_matching` — Hart & Mas-Colell: `p_j ∝ [R_j]⁺`, uniform when no regret is
+    positive. Parameter-free, which is its main practical virtue here.
+  * `hedge` — exponential weights: `p_j ∝ exp(η · cumulative payoff_j)`, with `η` from
+    `params.η_hedge`. Shifted by the max before exponentiating so a long run cannot
+    overflow.
+
+Both are returned as raw non-negative weights; the caller samples from them.
+"""
+function learner_weights(strategy, p, n, params)
+    st = learner_state!(p, n)
+    if strategy == "regret_matching"
+        w = max.(st.regret, 0.0)
+        return all(iszero, w) ? fill(1 / n, n) : w
+    elseif strategy == "hedge"
+        η = hasproperty(params, :η_hedge) ? params.η_hedge : 0.1
+        z = η .* st.payoff
+        z .-= maximum(z)                      # overflow guard, does not change the mix
+        return exp.(z)
+    else
+        error("unknown no-regret strategy: $strategy")
+    end
+end
+
+"""
+    update_learners!(players)
+
+Accumulate counterfactual regret and payoff for whichever players are running a
+no-regret learner. Called once per game step, after both choices are known.
+
+Counterfactuals use the opponent's REALIZED action, which is what makes this external
+regret: P1's payoff had it played `i` is `A[i, j]` for the column `j` the pursuer actually
+chose; P2's is `players[2].cost[i, j]` over `j`, its own (negated) matrix, for the row the
+evader actually chose. Players without a learner are skipped, so this is inert for every
+strategy in Gates A/B.
+"""
+function update_learners!(players)
+    i, j = players[1].chosen, players[2].chosen
+    (i isa Int && j isa Int) || return players
+
+    if players[1].learner_state !== nothing
+        u  = players[1].cost[:, j]            # P1's counterfactual payoffs (maximizer)
+        st = players[1].learner_state
+        st.regret .+= u .- u[i]
+        st.payoff .+= u
+    end
+    if players[2].learner_state !== nothing
+        u  = players[2].cost[i, :]            # P2's own matrix is -A, so it maximizes too
+        st = players[2].learner_state
+        st.regret .+= u .- u[j]
+        st.payoff .+= u
+    end
+    players
+end
+
+export learner_state!, learner_weights, update_learners!
+
+"""
+    update_beliefs!(game, players, γ = 1.0)
+
+Update fictitious play beliefs from the opponent's chosen vertex:
+
+    f_s = γ · f_{s-1} + g_{s-1}
+
+where `g_{s-1}` is the indicator of the vertex the opponent just played. **γ = 1 is plain
+fictitious play** — every observation counted equally forever — and is the default, so this
+changes no existing number.
+
+**C1: why γ < 1 is worth a parameter.** Uniform averaging pools observations across game
+steps that have *different payoff matrices*; by step 30 the players are three orbits from
+step 1. C3 measured how bad that is: the matrix moves 18.5% of its norm per step and the
+stage equilibrium's mixture moves 1.36 in L1 (out of a maximum 2.0), with the modal vertex
+changing 82% of the time. A belief that weights step 1 as heavily as step 29 is averaging
+over games that have little to do with each other.
+
+Effective memory is `1/(1-γ)` steps: γ = 0.9 remembers ~10, γ = 0.8 ~5, γ = 1 remembers all
+30. Note the discount applies to the *whole* count vector including its `ones(n)` prior, so
+the prior also decays — which is intended, since a stale prior is exactly as stale as a stale
+observation.
+
+**What C3 predicts this will and will not do.** FP's measured success is *not* explained by
+tracking the equilibrium (empirical play holds a flat ~0.25 km exploitability gap and never
+closes it); it comes from learning the opponent's *decision rule*, which is stable for a
+fixed-vertex or `greedy` opponent regardless of how the matrix moves. So discounting should
+help most against opponents whose rule genuinely *drifts* (`FP_*`, `Meta_*`) and do little or
+nothing against a stationary one. If γ < 1 improves play against a *fixed-vertex* evader,
+that is a bug, not a result — there is nothing to forget.
+"""
+function update_beliefs!(game, players, γ1 = 1.0, γ2 = γ1)
+
+    # γ == 1 short-circuits rather than multiplying by 1.0, so plain FP is bitwise
+    # untouched by this change (and no -0.0 can be introduced).
+    #
+    # The two players discount INDEPENDENTLY. A single global γ cannot answer C1's actual
+    # question in a self-play cell: with both players discounting, `FP_greedy` vs
+    # `FP_greedy` is a symmetric perturbation, so a change in separation says nothing
+    # about whether forgetting helps the *evader*. Against `mixed` the distinction does
+    # not arise (a `mixed` player never reads `fp_belief`), which is why that column is a
+    # clean one-sided test either way.
+    γ1 == 1.0 || (players[1].fp_belief .*= γ1)
+    γ2 == 1.0 || (players[2].fp_belief .*= γ2)
 
     # P1 observes P2's choice → update P1's belief about P2
     players[1].fp_belief[players[2].chosen] += 1
@@ -844,8 +975,14 @@ function compute_states_nash(params, game, players, rng)
     # choose strategies 
     choose_strategies!(players, mixing_weights, rng, params, game)
 
-    # update beliefs 
-    update_beliefs!(game, players)
+    # update beliefs (C1: γ < 1 discounts stale observations; γ = 1 is plain FP).
+    # γ_fp_p2 defaults to γ_fp, so a single γ still means "both players discount".
+    γ1 = hasproperty(params, :γ_fp)    ? params.γ_fp    : 1.0
+    γ2 = hasproperty(params, :γ_fp_p2) ? params.γ_fp_p2 : γ1
+    update_beliefs!(game, players, γ1, γ2)
+
+    # C2: accumulate no-regret state. Inert unless a player runs a learner.
+    update_learners!(players)
 
     # update chosen trajectories  
     players = update_chosen_trajectories!(players, params)
