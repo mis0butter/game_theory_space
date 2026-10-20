@@ -4,21 +4,20 @@ Guidance for Claude Code when working in this repository. When responding to pro
 
 ## Current state
 
-*Rewritten in place each session. Keep it short — results go in `LOG.md`, not here. Last updated: 2026-10-18.*
+*Rewritten in place each session. Keep it short — results go in `LOG.md`, not here. Last updated: 2026-10-19.*
 
 - **Goal:** submit to **ECC 2027 by Oct 31 2026** (PaperCept; review copy ≤ 8 pp, final ≤ 6 pp;
   ieeeconf, PDF ≤ 3 MB; CFP silent on blind review). Write for a **controls audience**.
 - **Research:** Gates A–C are done. No new sweeps are planned.
-- **Now:** rewriting the paper in `Game_Theory_Space_ECC_2027/`. It is still the CDC text and
-  steps 1 (remove stale CDC claims) and 2 (methods vs. the CDC reviews) are done; red `[TODO: …]` markers show where new content goes. The to-do list is in `README.md` § Paper to-do.
-- **Open review gap:** G2, the lifting bound's scope (step 3). G1 (`greedy` = heuristic) and
-  G3 (`FP_mixed` formula) are closed in `methods.tex`.
-- **Open defects:** D12 (deferred, off the hot path), D13 (FP opponents unidentifiable —
-  mention it in the writing).
+- **Paper:** paper steps 1–3 are drafted in `MAIN_PAPER.tex` (stale claims removed, methods
+  fixed against the reviews, lifting bound and all results written). **Next: figures
+  (step 4), then fit the page limit** (~5,200 words; probably over 6 pages). Two red markers
+  remain. The to-do list is in `README.md` § Paper to-do.
+- **Review gaps G1–G3 are closed in the text.** G2 is handled by Proposition 1 plus a scope paragraph.
+- **Open defects:** D12 (deferred, off the hot path), D13 (FP opponents unidentifiable).
 - **Data location:** full Gate B/C results are on the 32-core machine. This 8-core machine only
   has `mixed`/`mixed` and `FP_greedy`/`FP_greedy` (regenerated 2026-10-17).
-- **Repo:** last commit 66eadae. Uncommitted: doc rewrites, `test/analyze_c3.jl`, and the whole
-  `Game_Theory_Space_ECC_2027/` folder.
+- **Repo:** last commit 7d3aaa1. Uncommitted: step 3 edits, `test/analyze_solver.jl`, docs.
 
 ## Working rules
 

@@ -38,7 +38,7 @@ Luis Sentis$^{1}$
 % ================================================== % 
 \begin{abstract}
 
-Spacecraft pursuit-evasion games are traditionally formulated as deterministic differential games; however, pure-strategy solutions are often exploitable or non-existent in constrained orbital environments. This paper proposes a framework for non-cooperative orbital games by projecting continuous control problems into a discrete set of candidate trajectories. By employing mixed strategies and Fictitious Play (FP), we enable an agent to adapt to an opponent's strategy in real-time. We evaluate our approach through Monte Carlo simulations in a three-dimensional orbital environment. \red{[TODO: headline results with intervals — the safety/adaptation tradeoff, the sign reversal, the lifting bound, solver reliability.]}
+Spacecraft pursuit-evasion games are traditionally formulated as deterministic differential games, whose pure-strategy solutions can be exploitable or may not exist. We lift the continuous game onto a finite set of candidate trajectories: at each step of a receding-horizon scheme, each spacecraft computes minimum-fuel impulsive trajectories to the vertices of a hexagon on the evader's reference orbit, and the resulting zero-sum matrix game is solved by a certified linear program. We bound the value lost by this restriction and show empirically that the six-vertex game is within 1.5\% of the extrapolated continuous value. All 72,000 sampled trajectory problems converge, and a decision step takes a median of 0.5~s of computation against nearly ten minutes of executed flight. Within this scheme we compare the minimax (security) strategy with fictitious play (FP), which learns the opponent online. In 100-trial Monte Carlo tournaments, FP is both the best evader and the best pursuer, gaining $0.74 \pm 0.08$~km of separation over minimax against a minimax pursuer, but the gain reverses sign ($-0.25 \pm 0.05$~km) against another learner. Against a predictable evader the price of safety is large: the minimax pursuer gives up over 3~km of separation and rarely captures, while FP recovers over 97\% of an omniscient pursuer's advantage.
 
 \end{abstract}
 
@@ -74,9 +74,9 @@ agents can adapt to an opponent’s real-time actions \cite{albrechtReasoningHyp
 In this work, we optimize over a discrete set of candidate trajectories to determine best-response strategies. Our primary contributions are as follows:
 
 \begin{enumerate}
-    \item We develop a methodology to project the continuous control pursuit-evasion game into a discrete set of candidate trajectories around a reference orbit.
-    \item We utilize fictitious play, allowing an agent to profile an opponent's strategy in real-time.
-    \item We provide a Monte Carlo table of stationary results by pitting various strategy types against one another: Greedy, Mixed, Random, and Fictitious Play.
+    \item A lifted receding-horizon formulation of orbital pursuit-evasion, with a bound on the value lost by restricting each player to finitely many candidate trajectories and an empirical convergence study as the candidate set is refined.
+    \item A reliable solution pipeline, characterized by convergence rate and runtime: nonconvex trajectory programs solved by quasi-Newton optimization with automatic differentiation, and matrix games solved by linear programming with a solver-independent equilibrium certificate.
+    \item A Monte Carlo comparison, with confidence intervals and capture rates, of minimax play against fictitious play that learns the opponent online, quantifying both what learning gains and the price of safety.
 \end{enumerate}
 
 % 
@@ -114,7 +114,7 @@ A significant limitation in classical PE literature is the reliance on determini
 % Strategy exploitation has been further extended through type-based reasoning, a Bayesian framework for reasoning about hypothetical agent behaviors \cite{albrechtReasoningHypotheticalAgent}. 
 
 By maintaining a probability distribution over a set of possible choices, an agent can profile an opponent's strategy in real-time. 
-In this work, we project the pursuit-evasion game into a discrete trajectory space defined by the orbital bandwidth and apply this update mechanism to transition from a generic game-theoretic solution to a tailored best-response \cite{swenson_best-response_2018, guan_best_2025}. We provide a framework for adaptation in non-stationary gameplay, specifically within the dynamics of orbital pursuit-evasion.
+In this work, we project the pursuit-evasion game onto a hexagonal set of candidate trajectories around the evader's reference orbit and apply this update mechanism to transition from a generic game-theoretic solution to a tailored best-response \cite{swenson_best-response_2018, guan_best_2025}. We provide a framework for adaptation in non-stationary gameplay, specifically within the dynamics of orbital pursuit-evasion.
 
 % A common limitation in the aforementioned works is the reliance on deterministic (pure) strategies. In many orbital scenarios, a pure-strategy Nash equilibrium may not exist, or the resulting trajectory may be easily exploited by an opponent with superior intelligence. To mitigate this, recent robotics research has shifted toward mixed strategies.
 
@@ -131,10 +131,6 @@ In this work, we project the pursuit-evasion game into a discrete trajectory spa
 \section{Problem Formulation}
 \label{sec:prob_form}
 % \input{sections/prob_form}
-
-% 2026-10-18 (step 2): stated the dynamics' assumptions (R7 #1), separated physical distance
-% from the stage payoff (R7 m1), fixed the sign convention (R7 #2), and removed the
-% orbital-bandwidth / feasible-set constraints, which are not enforced by the method.
 
 Consider a pursuer $P$ and an evader $E$ in low Earth orbit. The state of each agent $i \in \{P, E\}$ is $\mathbf{x}_i(t) = [\mathbf{r}_i^\top(t), \mathbf{v}_i^\top(t)]^\top \in \mathbb{R}^6$, where $\mathbf{r}_i$ and $\mathbf{v}_i$ are Cartesian position and velocity in the Earth-Centered Inertial (ECI) frame. Time is divided into segments of equal duration $\Delta t$, and the state evolves as
 %
@@ -170,7 +166,7 @@ J(\mathbf{U}_E, \mathbf{U}_P) = \frac{1}{L}\sum_{k=0}^{L-1} \ell_k ,
 \label{eq:objective}
 \end{equation}
 %
-where $\mathbf{U}_i = \{\mathbf{u}_i(t_0), \dots, \mathbf{u}_i(t_{L-1})\}$ is player $i$'s control sequence. The payoff depends on separation only: fuel is minimized when each candidate trajectory is generated (Section~\ref{sec:methods}) and is reported separately rather than traded against separation.
+where $\mathbf{U}_i = \{\mathbf{u}_i(t_0), \dots, \mathbf{u}_i(t_{L-1})\}$ is player $i$'s control sequence. The payoff depends on separation only: fuel is minimized when each candidate trajectory is generated (Section~\ref{sec:methods}) rather than traded against separation in the game.
 
 % ----------------
 
@@ -204,12 +200,6 @@ However, a pure-strategy saddle point of \eqref{eq:minimax} over continuous cont
 \section{Approach}
 \label{sec:methods}
 % \input{sections/methods}
-
-% 2026-10-18 (step 2): rewritten against the CDC reviews and the code. Frame construction
-% (R5 #1), position-only miss (R8 #2), evader/pursuer indices (R8 #3), both LPs in the
-% correct sign convention (R7 #2-3, R8 #1), "game value" reserved for the LP value (R7 #6),
-% beliefs FP-only with distinct symbols (R7 m2, R8 #4), greedy labelled a heuristic (R7 #4),
-% FP-mixed defined (R7 #5), and the trajectory problem stated as actually solved (R7 #1).
 
 To avoid the issues of equilibrium non-existence and deterministic strategies, we replace the continuous control space with a lifted game played over a finite set of candidate trajectories. Each game step, both players generate candidates, the resulting matrix game is solved for a mixed equilibrium, and each player selects a candidate according to its strategy, which may use beliefs about the opponent learned online.
 
@@ -258,7 +248,7 @@ i.e., prograde, nadir, and orbit normal. On a non-circular orbit $\hat{\mathbf{e
 \label{eq:vertices}
 \end{equation}
 %
-for $j = 1, \dots, 6$. Both players target the same six vertices. The vertices are a finite sample of the positions the evader may occupy one horizon ahead. \red{[TODO: forward reference to the lifting-bound section, which bounds the error of this restriction.]}
+for $j = 1, \dots, 6$. Both players target the same six vertices. The vertices are a finite sample of the positions the evader may occupy one horizon ahead; Section~\ref{sec:lifting} bounds the error of this restriction.
 
 % -------------
 
@@ -323,6 +313,21 @@ Normalizing gives the mixing weights $\mathbf{p}^* = \mathbf{z}^*/\mathbf{1}^\to
 \end{equation}
 %
 together with $\mathbf{p}^{*\top}\mathbf{A}\mathbf{q}^* = V$ and simplex feasibility, all to a relative tolerance of $10^{-8}$. A pair satisfying \eqref{eq:certificate} is a Nash equilibrium of the matrix game regardless of which solver produced it.
+
+% --------------
+
+\subsection{Approximation Error of the Lifting}
+\label{sec:lifting}
+
+Restricting each player to $M$ vertices changes the game. To bound the change, consider the stage game in which each player may target \emph{any} point on the circle $\mathcal{C}$ of radius $R$ that circumscribes the polygon, with payoff $a(\mathbf{x}, \mathbf{y}) = J\big(\mathbf{U}_E(\mathbf{x}), \mathbf{U}_P(\mathbf{y})\big)$ when the evader targets $\mathbf{x} \in \mathcal{C}$ and the pursuer targets $\mathbf{y} \in \mathcal{C}$, each flying the solution of \eqref{eq:mpc}. Let $V_{\mathcal{C}}$ be its value in mixed strategies, and $V_M$ the value of the lifted game on $M$ equally spaced vertices.
+
+\textit{Assumption 1:} $a$ is $L$-Lipschitz in each argument: $|a(\mathbf{x}, \mathbf{y}) - a(\mathbf{x}', \mathbf{y})| \leq L\|\mathbf{x} - \mathbf{x}'\|$, and likewise in $\mathbf{y}$. This requires the solution of \eqref{eq:mpc} to vary continuously with its target, which holds where that solution is locally unique.
+
+\textit{Proposition 1:} Under Assumption~1, $|V_M - V_{\mathcal{C}}| \leq L\,h_M$, where $h_M = 2R\sin(\pi/2M)$ is the largest distance from a point of $\mathcal{C}$ to its nearest vertex.
+
+\textit{Proof:} $a$ is continuous on the compact set $\mathcal{C} \times \mathcal{C}$, so $V_{\mathcal{C}}$ exists \cite{bacsar1998dynamic}. Let $\pi$ map each point of $\mathcal{C}$ to its nearest vertex, so $\|\pi(\mathbf{x}) - \mathbf{x}\| \leq h_M$. Take any evader strategy $\mu$ on $\mathcal{C}$ that guarantees $V_{\mathcal{C}} - \eta$, and let the evader play $\pi(\mathbf{x})$, $\mathbf{x} \sim \mu$, in the lifted game. Against any pursuer vertex strategy $\mathbf{q}$, which is also a strategy on $\mathcal{C}$, Assumption~1 gives an expected payoff of at least $V_{\mathcal{C}} - \eta - L h_M$. Hence $V_M \geq V_{\mathcal{C}} - L h_M$ as $\eta \to 0$. The symmetric argument for the pursuer gives $V_M \leq V_{\mathcal{C}} + L h_M$. \hfill $\blacksquare$
+
+Since $h_M$ halves each time $M$ doubles, the lifted value converges to $V_{\mathcal{C}}$ at rate $O(1/M)$. Two limits on the scope of Proposition~1 should be stated plainly. First, it compares the lifted game with a game whose targets lie on $\mathcal{C}$; the original problem \eqref{eq:minimax} ranges over all reachable controls, and the bound does not extend to it without a covering of the reachable set. Second, it holds for one stage; it does not bound the receding-horizon closed loop. The constant $L$ is not known a priori, and Section~\ref{sec:results} estimates it from the convergence of $V_M$.
 
 % --------------
 
@@ -391,13 +396,7 @@ Writing $\mathbf{w}^*$ for a player's own equilibrium weights ($\mathbf{p}^*$ or
 \label{sec:results}
 % \input{sections/results}
 
-% 2026-10-18: every result from the CDC submission was removed (tables, figures, and the
-% prose built on them). Those numbers came from runs with the LP sign error (defect D1),
-% OSQP, identical initial orbits, and lambda_2 = 0.1. The red TODOs mark where the
-% re-measured results go; all numbers come from LOG.md with their intervals.
-
-We evaluate the approach on a two-spacecraft pursuit-evasion scenario in low Earth orbit.
-\red{[TODO: one-sentence roadmap of the results subsections.]}
+We evaluate the approach on a two-spacecraft pursuit-evasion scenario in low Earth orbit. We first report solver reliability and the accuracy of the lifting, then compare learning and minimax strategies by separation, capture, and the price of safety.
 
 \subsection{Simulation Set-Up}
 
@@ -405,22 +404,62 @@ We consider a pursuit-evasion scenario in low Earth orbit. The reference traject
 
 At each game step, both players simultaneously select one of six target vertices arranged as a regular hexagon of radius $R = 6.378$ km in the local orbital frame.
 We compute the $\Delta V$ impulses to generate the candidate trajectories from the current state to each vertex via \eqref{eq:mpc}.
-The game is discretized into $K = 50$ segments per orbit, and each player optimizes over an $L=10$-segment horizon. The resulting $6 \times 6$ payoff matrix is computed via \eqref{eq:ave_stage_cost} with $\epsilon = 0.1$ km; the payoff depends on separation only, and $\Delta V$ is reported as a separate metric.
+The game is discretized into $K = 50$ segments per orbit, and each player optimizes over an $L=10$-segment horizon. The resulting $6 \times 6$ payoff matrix is computed via \eqref{eq:ave_stage_cost} with $\epsilon = 0.1$ km; the payoff depends on separation only.
 The matrix-game LPs \eqref{eq:game_LP}--\eqref{eq:game_LP_P} are solved each step with Ipopt \cite{wachter2006implementation} at tolerance $10^{-14}$, and every solution is checked against \eqref{eq:certificate}. Each game step executes $N=5$ segments, and then the horizon shifts to generate the next set of candidate trajectories.
 
 We evaluate all 25 pairwise matchups of the five strategies of Section~\ref{sec:strategies} over $S = 30$ game steps (three orbital periods). Each matchup is run for 100 Monte Carlo trials. Trial $k$ uses the same randomized initial conditions in every matchup (common random numbers), so differences between matchups are compared trial by trial. All reported intervals are 95\% confidence intervals.
 
-\subsection{Results}
+\subsection{Solver Reliability and Timing}
 
-\red{[TODO: solver and LP reliability — convergence rate, time per solve, terminal miss vs.\ $R$, certificate failures.]}
+Over the 72,000 trajectory problems \eqref{eq:mpc} solved in two complete matchups (mixed vs.\ mixed and FP-greedy vs.\ FP-greedy, 100 trials each), every solve converged (95\% Wilson lower bound 99.995\%), with a median of 56 L-BFGS iterations. The median terminal miss was $4.5 \times 10^{-12}$~km and the largest $1.5 \times 10^{-7}$~km, i.e., $2.4 \times 10^{-8} R$: every candidate reaches its vertex, so the finite action set is exactly the one the matrix game assumes. The largest per-segment impulse was 0.032~km/s, 62 times below $\Delta V_{\max}$, so the bound never activated. For comparison, Ipopt applied to the same problem through a generic nonlinear interface converged on none of 60 benchmark problems at any iteration budget up to 5,000. All 6,000 matrix-game solutions passed the certificate \eqref{eq:certificate}: the median violation was $2.8 \times 10^{-15}$, the largest $1.3 \times 10^{-12}$. One game step (12 trajectory solves and one LP, run serially on one core) took a median of 0.54~s and at most 4.7~s, against 583~s of executed flight per step: a real-time margin of at least $120\times$.
 
-\red{[TODO: the $5 \times 5$ tournament and the sign reversal — table of FP-greedy $-$ mixed by opponent, with intervals. No ``dominant'' language: nothing is dominant.]}
+\subsection{Approximation Error of the Lifting}
 
-\red{[TODO: capture — hard 0.2 km and soft 1.0 km definitions and rates.]}
+To test Proposition~1, we repeated the mixed vs.\ mixed and FP-greedy vs.\ mixed matchups with $M = 12$ and $M = 24$ vertices under the same initial conditions. Table~\ref{tab:lifting} reports the per-step game value. The value changes by 1.2\% from $M = 6$ to $M = 24$, and successive differences shrink by a factor of 0.34 per doubling of $M$, faster than the factor 0.5 that the $O(h_M)$ bound allows. Extrapolating $V_M = V_{\mathcal{C}} + C h_M$ gives $V_{\mathcal{C}} \approx 2.074\ \sqrt{\mathrm{km}}$ and an empirical constant $L \approx 0.008\ \sqrt{\mathrm{km}}$ per km, so the hexagon is within 1.5\% of the extrapolated circle value. \red{[TODO: paired CI on $V_6 - V_{24}$ from \texttt{analyze\_c4.jl}.]} The learning advantage is not an artifact of the coarse action set: FP-greedy's gain over the minimax evader grows from $0.735 \pm 0.083$~km at $M = 6$ to $0.858 \pm 0.084$ at $M = 12$ and $0.931 \pm 0.070$ at $M = 24$.
 
-\red{[TODO: price of safety — oracle vs.\ FP vs.\ Nash pursuer against fixed-vertex evaders, and the reversal against a mixed evader.]}
+\begin{table}[!t]
+\centering
+\caption{\textbf{Lifted game value as the vertex set is refined.} Mean per-step LP value (mixed vs.\ mixed, 100 trials $\times$ 30 steps) with 95\% CI.}
+\begin{tabular}{cccc}
+\toprule
+$M$ & $h_M$ [km] & $V_M$ [$\sqrt{\mathrm{km}}$] & Distance to $V_{\mathcal{C}}$ \\
+\midrule
+6  & 3.302 & $2.1057 \pm 0.0263$ & 1.5\% \\
+12 & 1.665 & $2.0869 \pm 0.0264$ & 0.6\% \\
+24 & 0.834 & $2.0806 \pm 0.0263$ & 0.3\% \\
+\bottomrule
+\end{tabular}
+\label{tab:lifting}
+\end{table}
 
-\red{[TODO: $\Delta V$ — reported separately from the payoff, re-measured.]}
+\subsection{Learning Versus Minimax Play}
+
+Across the $5 \times 5$ tournament, FP-greedy is the best evader (mean separation $6.07 \pm 0.15$~km averaged over pursuers) and the best pursuer ($4.82 \pm 0.06$~km averaged over evaders). Its advantage over minimax play, however, depends on the opponent (Table~\ref{tab:contrast}). Against a minimax pursuer, the FP-greedy evader gains $0.735 \pm 0.083$~km; against a random pursuer, $1.98 \pm 0.20$~km. Against an FP-greedy pursuer the gain \emph{reverses sign} ($-0.254 \pm 0.051$~km): exploiting an exploiter is worse than playing safe, and the FP-greedy vs.\ FP-greedy matchup gives the lowest separation in the tournament (4.61~km). FP-greedy beats minimax against a minimax opponent because the minimax guarantee holds for each stage game separately and does not compound over a 30-step game whose payoff matrix changes every step. Treating the tournament as a meta-game confirms that no strategy is dominant: its equilibrium mixes FP-greedy with greedy for the evader and with minimax for the pursuer.
+
+\begin{table}[!t]
+\centering
+\caption{\textbf{FP-greedy minus minimax evader, by pursuer.} Paired difference in mean separation over 100 trials with common initial conditions; 95\% CI.}
+\begin{tabular}{lcc}
+\toprule
+Pursuer & $\Delta$ separation [km] & $t$ \\
+\midrule
+Greedy    & $+0.003 \pm 0.072$ & $+0.08$ \\
+Minimax (mixed) & $+0.735 \pm 0.083$ & $+17.3$ \\
+Random    & $+1.983 \pm 0.198$ & $+19.6$ \\
+FP-greedy & $\mathbf{-0.254 \pm 0.051}$ & $\mathbf{-9.81}$ \\
+FP-mixed  & $+0.631 \pm 0.126$ & $+9.83$ \\
+\bottomrule
+\end{tabular}
+\label{tab:contrast}
+\end{table}
+
+\subsection{Capture}
+
+Games are not terminated at capture; instead, capture is the first time the separation falls below a radius. We use two radii: \emph{hard} capture at 0.2~km, comparable to the keep-out sphere used for space-station proximity operations \red{[cite]}, and \emph{soft} capture at 1.0~km, the radius at which capture rates differ most across matchups. Pooled over pursuers, a minimax evader is soft-captured in 86.2\% [82.9, 88.9] of games and an FP-greedy evader in 62.6\% [58.3, 66.7] (95\% Wilson intervals). Hard capture is rare overall, but mutual exploitation courts it: the FP-greedy vs.\ FP-greedy matchup ends in hard capture in 18\% [11.7, 26.7] of games, against 2.6\% [2.0, 3.3] pooled over the other 24 matchups.
+
+\subsection{The Price of Safety}
+
+To measure how much a pursuer gives up by playing minimax, we pit three pursuers against evaders that always target the same vertex, the most predictable opponent possible. The \emph{oracle} pursuer is told the evader's true decision rule and best-responds to its distribution each step; it is a ceiling on exploitation, not a realistic player. Against these evaders, the minimax pursuer allows 3.16--3.31~km more separation than the oracle, depending on the vertex (paired $t = 94$--$110$). The oracle and FP-greedy pursuers hard-capture 100\% of fixed-vertex evaders; the minimax pursuer, 0--9\%. FP-greedy recovers 97.5--99.4\% of the oracle's advantage, choosing the oracle's vertex in 75\% of steps 1--5 and in every step from step 6 on. Against a minimax evader the picture reverses: the oracle allows $0.117 \pm 0.060$~km \emph{more} separation than the minimax pursuer ($t = -3.82$; 5.10 vs.\ 4.98~km), and FP-greedy does best of the three (4.87~km). Knowing a randomizing opponent's distribution buys nothing, and committing to a one-step best response to it hurts over 30 steps. Because the oracle best-responds one step at a time rather than optimizing the whole game, these prices of safety are lower bounds.
 
 
 % % ================================================== % 
@@ -432,11 +471,11 @@ We evaluate all 25 pairwise matchups of the five strategies of Section~\ref{sec:
 
 % \subsubsection{Discussion}
 
-\red{[TODO: discussion rewritten from the new results — learning pays against most opponents, loses against another learner (the sign reversal), and the price of safety. The old claims that FP ``consistently outperforms'' all baselines, wins on fuel, and that random beats greedy ``at every horizon'' were removed: the first is contradicted by the sign reversal, the others were never re-measured.]}
+Lifting the continuous game onto a hexagon of candidate trajectories makes each decision step a small matrix game that is solved reliably and far faster than real time, at a cost in fidelity that is both bounded (Proposition~1) and small in practice (1.5\% of the extrapolated value).
 
-The advantage is primarily informational: all players share the same action space and $\Delta V$ constraints, yet FP players achieve better outcomes by learning the opponent's behavior online.
+Within this scheme, learning the opponent pays when the opponent's decision rule is stable. Against a fixed-vertex evader, fictitious play nearly matches an omniscient pursuer, while the minimax pursuer gives up over 3~km of separation and almost never captures. Against a minimax opponent, FP still gains, because the minimax guarantee protects each stage game but not the 30-step game. The advantage is informational: all players share the same action set and $\Delta V$ limits. But learning is itself exploitable. Two learners produce the lowest separation and the highest hard-capture rate in the tournament, and against a minimax evader even perfect knowledge of the opponent's distribution does worse than minimax. Neither learning nor safety dominates; the right choice depends on how predictable the opponent is.
 
-In future work, the fictitious-play framework can be extended with Bayesian meta-strategy reasoning, in which the agent maintains a posterior belief over a library of opponent types and best-responds by marginalizing over this belief. This would enable the agent to distinguish not only \textit{which} vertices the opponent favors but \textit{why}, and accelerate learning against dynamic strategies.
+Three limitations bound these conclusions. Proposition~1 covers the stage game on the circle, not the original continuous game or the receding-horizon closed loop, and its constant is estimated rather than derived. The oracle best-responds one step at a time, so the price of safety is a lower bound. Fictitious play pools observations across steps with different payoff matrices, which is justified only to the extent that the opponent's rule, not the game, stays fixed. Future work includes extending the bound to a covering of the reachable set, and Bayesian reasoning over a library of opponent types, which would let a player identify \textit{why} an opponent favors certain vertices and adapt faster when its rule changes.
 
 
 % ================================================== % 

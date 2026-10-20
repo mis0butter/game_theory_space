@@ -30,14 +30,15 @@ A **game-theoretic receding-horizon guidance law**, with three contributions:
 
 | Result | Number | LOG |
 |---|---|---|
-| Candidates reach their vertices | median miss 4.1 cm vs a 6.378 km hexagon | 08-31 |
-| Trajectory solver reliability | 99.53% converge, ~16 ms/solve; Ipopt 0/12 | 08-31 |
-| LP correctness | 0 / 2,500 certificate failures | 08-31 |
+| Candidates reach their vertices | median miss 4.5e-12 km, max 1.5e-7 km vs a 6.378 km hexagon | 10-19 |
+| Trajectory solver reliability (LBFGS) | 72,000/72,000 converge; Ipopt 0/60 | 10-19 |
+| LP correctness | 0 / 6,000 certificate failures (max 1.3e-12) | 10-19 |
+| Real-time margin | 0.54 s median compute per step vs 583 s executed (≥ 123×) | 10-19 |
 | FP_greedy is the best evader and best pursuer | 6.07 ± 0.15 / 4.82 ± 0.06 km | 09-02 |
 | FP_greedy − mixed (evader), vs a mixed pursuer | **+0.735 ± 0.083 km** | 09-02 |
 | … vs an FP_greedy pursuer | **−0.254 ± 0.051 km** — the sign reverses | 09-02 |
 | Nothing is dominant (meta-game) | FP_greedy in the support on both sides, pure on neither | 09-02 |
-| Capture (hard 0.2 km / soft 1.0 km) | FP vs FP hard-capture 18% vs ≤ 9% everywhere else | 09-16 |
+| Capture (hard 0.2 km / soft 1.0 km) | FP vs FP hard-capture 18% [11.7, 26.7] vs 2.6% [2.0, 3.3] pooled elsewhere | 10-19 |
 | Price of safety vs a fixed-vertex evader | +3.16–3.31 km; oracle and FP capture 100%, Nash 0–9% | 09-16 |
 | FP vs the omniscient oracle | FP recovers 97.5–99.4% of the available exploitation | 09-16 |
 | Six vertices vs the continuum | 1.5% from extrapolated value; FP edge grows to +0.931 at 24 vertices | 09-17 |
@@ -77,7 +78,7 @@ the fuel-efficiency claims; "FP ensures convergence" in related work.
 | MPC problem | State what is actually solved (exact-penalty LBFGS, cap never binds); drop the red 𝓕 / 𝓑 / Sims-Flanagan text | R7 #1 |
 | Throughout | "Game value" means only the LP value; one game-step symbol | R7 #6, R8 #6 |
 
-**3. Add the new ECC content.** A lifting-bound section with **G2**, the bound's scope: it
+**3. ✅ Add the new ECC content** (drafted 2026-10-19; two red markers remain: a paired CI for V₆ − V₂₄, and the ISS keep-out citation). A lifting-bound section with **G2**, the bound's scope: it
 covers the circle stage game, not the continuous closed loop. A solver paragraph, with the
 real-time margin re-measured. Capture definitions and rates. Price of safety. The
 sign-reversal table with intervals.

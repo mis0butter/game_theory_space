@@ -6,6 +6,58 @@ identifier), what was decided, what was measured, what is predicted for the next
 
 ---
 
+## 2026-10-19 — solver reliability re-measured on the current pipeline; paper step 3 drafted
+
+**Why re-measure:** the reliability numbers the docs quoted did not come from the pipeline
+behind the results. 99.53% convergence was **BFGS** in the Aug 31 smoke sweep, and the
+"4.1 cm terminal miss" was measured **before the solver change**. Every Gate B/C result was
+produced with **LBFGS**.
+
+**Run:** new `test/analyze_solver.jl` reads the per-solve `solve_info` records. Inputs: the
+two locally regenerated cells (`mixed`/`mixed`, `FP_greedy`/`FP_greedy`, 8-core machine,
+2026-10-17), giving 72,000 trajectory solves and 6,000 LPs.
+
+| quantity | value |
+|---|---|
+| trajectory solves converged | **72,000 / 72,000** (Wilson 95% lower bound 99.995%) |
+| escalated to AL (ΔV cap hit) | 0 |
+| terminal miss | median 4.5e-12 km, p95 1.2e-11, max 1.5e-7 km (= 2.4e-8 R) |
+| max per-segment ΔV | 0.0324 km/s vs 2.0 cap (62×) |
+| L-BFGS iterations | median 56, p95 94 |
+| wall time per solve | median 40 ms, p95 83 ms (8 threads contending; ~16 ms on the 32-core) |
+| LP certificate violation | median 2.8e-15, max 1.3e-12, 0 above 1e-8, 0 fallbacks |
+| compute per game step (12 solves + LP, serial) | median 0.54 s, p95 0.76, max 4.72 s |
+| trajectory executed per step | 583 s, so the margin is ≥ 123× (median 1,082×) |
+
+**Caveat:** this covers 2 of the 25 tournament cells. Run the script on the 32-core machine's
+full sweep to confirm it holds sweep-wide.
+
+**Unit correction:** the LP value V_M (C4) is in **√km**, not km, because the payoff is
+√(d + ε). `analyze_c4.jl` and the 2026-09-17 C4 entry label it "km". Mean separations
+(tournament, B6) are genuinely km.
+
+**Paper step 3 (`MAIN_PAPER.tex`):**
+- New subsection "Approximation Error of the Lifting" (`sec:lifting`). Proposition 1,
+  |V_M − V_𝒞| ≤ L·h_M, proved by nearest-vertex projection under a Lipschitz assumption
+  (Assumption 1), with an explicit scope paragraph (G2): it covers the circle stage game, not
+  the original problem or the closed loop.
+- Results: solver reliability and timing (numbers above); lifting convergence (Table, C4);
+  learning vs minimax (contrast table, sign reversal, EGTA sentence); capture (hard 0.2 /
+  soft 1.0, Wilson CIs); price of safety (B6).
+- New abstract, contributions list and discussion.
+- Dropped the separate-ΔV promise: no executed-ΔV numbers exist for Gate B.
+
+**Hard-capture comparison corrected for the paper:** LOG 09-16's "18% vs ≤ 9% in every other
+cell" is not separated cell-by-cell. FP/FP 18% [11.7, 26.7] overlaps the next cell's 9%
+[4.8, 16.2]. Against the other 24 cells *pooled*, 62/2,400 = 2.6% [2.0, 3.3], it separates
+cleanly. The paper uses the pooled comparison.
+
+**Remaining red markers:** a paired CI on V₆ − V₂₄ (needs the 32-core C4 data), and a
+citation for the ISS 200 m keep-out sphere. **Length:** ~5,200 words by rough count, so likely
+over 6 pages once compiled. Not compiled here.
+
+---
+
 ## 2026-10-19 — paper merged into one file
 
 The author pasted every section into `MAIN_PAPER.tex`; the `\input{sections/...}` lines are
