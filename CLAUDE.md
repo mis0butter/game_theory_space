@@ -10,14 +10,16 @@ Guidance for Claude Code when working in this repository. When responding to pro
   ieeeconf, PDF ≤ 3 MB; CFP silent on blind review). Write for a **controls audience**.
 - **Research:** Gates A–C are done. No new sweeps are planned.
 - **Paper:** paper steps 1–3 are drafted in `MAIN_PAPER.tex` (stale claims removed, methods
-  fixed against the reviews, lifting bound and all results written). **Next: figures
-  (step 4), then fit the page limit** (~5,200 words; probably over 6 pages). Two red markers
-  remain. The to-do list is in `README.md` § Paper to-do.
+  fixed against the reviews, lifting bound and all results written). **Next: the ISS 200 m keep-out
+  citation (last red marker), then figures (step 4), then fit the page limit** (~5,200 words;
+  probably over 6 pages). The to-do list is in `README.md` § Paper to-do.
 - **Review gaps G1–G3 are closed in the text.** G2 is handled by Proposition 1 plus a scope paragraph.
 - **Open defects:** D12 (deferred, off the hot path), D13 (FP opponents unidentifiable).
-- **Data location:** full Gate B/C results are on the 32-core machine. This 8-core machine only
-  has `mixed`/`mixed` and `FP_greedy`/`FP_greedy` (regenerated 2026-10-17).
-- **Repo:** last commit 7d3aaa1. Uncommitted: step 3 edits, `test/analyze_solver.jl`, docs.
+- **Machine:** work is now on the **32-core Linux machine**, which has the full Gate B/C results
+  in `test/results/`. The 8-core Mac (used 10-17 to 10-19) only had `mixed`/`mixed` and
+  `FP_greedy`/`FP_greedy`. Solver reliability, C4 CIs and C3 were re-run here on 10-19. Every
+  number the paper uses now comes from this machine.
+- **Repo:** last commit 7ba73fe, working tree clean.
 
 ## Working rules
 
@@ -38,11 +40,11 @@ Guidance for Claude Code when working in this repository. When responding to pro
 ## The paper
 
 - **Edit the `.tex` files in `Game_Theory_Space_ECC_2027/` directly.** That folder is the paper.
-- **The whole paper is in `MAIN_PAPER.tex`** (sections pasted in 2026-10-19). Edit only that
-  file. `sections/*.tex` are stale copies — do not edit them. The one exception is
-  `sections/macros.tex`, which is still `\input` and holds the preamble. `root_template.tex` and `root.pdf` are the ECC template, not the
-  paper. `sections/old/`, `MAIN_PRES.tex` and `pres_*` are not part of the paper.
-- **LaTeX is not installed on this machine**, so page count and compile errors can only be
+- **The whole paper is in `MAIN_PAPER.tex`.** Edit only that file, plus `macros.tex` (the
+  preamble, `\input{macros}`). The `sections/` folder was deleted (commit 4b8c7a4).
+  `root_template.tex` and `root.pdf` are the ECC template, not the paper. `MAIN_PRES.tex` and
+  `pres_*` are not part of the paper.
+- **LaTeX is not installed on either machine**, so page count and compile errors can only be
   checked where the author compiles. Say so rather than guess.
 - Figures: PDF, one ieeeconf column wide where possible. Keep the whole PDF ≤ 3 MB.
 - Every number in the paper must come from `LOG.md` with its interval, using one machine's
@@ -82,7 +84,9 @@ julia -t 32 --project=.        # ALWAYS pass -t; Threads.nthreads() defaults to 
 - Analysis: `test/analyze_gate_b.jl`, `analyze_b6.jl`, `analyze_c1c2.jl`, `analyze_c3.jl`,
   `analyze_c4.jl`. Results go to `test/results/` (gitignored).
 - Everything else in `test/` is a REPL-style script, not a test.
-- **Cost** (32-core): ~16 ms per LBFGS trajectory solve; ~46 s per 30-step game single-threaded.
+- **Cost** (32-core, `test/bench_step.jl`, `-t 1`): 11.6 ms per LBFGS solve, 0.16 s per game step.
+  The `t_solve` recorded in sweeps is ~17× higher because 32 games contend for the processor.
+  Do not quote it as single-core.
 
 ## Code organization
 

@@ -1,7 +1,7 @@
 # =============================================================================
 # C3 — FP convergence, split into the two claims that must not be conflated.
 #
-#   julia -t 8 --project=. test/analyze_c3.jl
+#   julia -t 32 --project=. test/analyze_c3.jl          (C3_N_FROZEN=all for every matrix)
 #
 # Runs entirely on existing Gate B data — no new sweep.
 #
@@ -29,6 +29,9 @@ using trajectory_optimization_game_theory
 using LinearAlgebra, Random, Statistics, Printf
 
 const NG, NS = 100, 30
+# Frozen-matrix sample size for C3.1. 200 is the logged default; set C3_N_FROZEN=all to
+# run every matrix (removes the "200 of 3,000 sampled" caveat; FP is cheap on a 6×6).
+const N_FROZEN = get(ENV, "C3_N_FROZEN", "200")
 
 """
 Fictitious play on a frozen matrix, in the same convention as `update_beliefs!`
@@ -71,7 +74,8 @@ function main()
     println("regime where the classical theorem applies.")
     println("="^80)
     rng = MersenneTwister(1)
-    sample = A_all[rand(rng, 1:length(A_all), 200)]
+    sample = N_FROZEN == "all" ? A_all : A_all[rand(rng, 1:length(A_all), parse(Int, N_FROZEN))]
+    @printf("  frozen-matrix sample: %d of %d matrices\n", length(sample), length(A_all))
     cps = [10, 100, 1_000, 10_000]
     curves = [frozen_fp(A, cps) for A in sample]
     @printf("  %-12s %14s %14s %14s\n", "iterations", "median NashConv", "p90", "max")

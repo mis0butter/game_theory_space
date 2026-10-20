@@ -6,6 +6,104 @@ identifier), what was decided, what was measured, what is predicted for the next
 
 ---
 
+## 2026-10-19 (32-core) — C3 re-run here; the frozen-matrix tail now covers all 3,000 matrices
+
+**Run:** `test/analyze_c3.jl` on the original Gate B cells (no new sweep). It ran twice: once
+with the default 200-matrix sample, and once with the new `C3_N_FROZEN=all` option (every
+matrix; FP on a 6×6 is cheap).
+
+**Value check (same machine as 09-17): passes.** The 200-sample run reproduces the 09-17
+numbers: median 3.370e-3 at T = 10,000, rate T^-0.56, ‖ΔA‖/‖A‖ 18.47%, ‖Δp*‖₁ 1.3594, |ΔV|
+0.1306, and FP/FP NashConv 2.63e-1 / 2.24e-1. The Mac's 10-17 numbers differed only by the
+known cross-machine drift.
+
+**C3.1 on all 3,000 matrices** (this replaces the Mac's 10-17 tail table):
+
+| | 10 | 100 | 1,000 | 10,000 | rate |
+|---|---|---|---|---|---|
+| median | 1.647e-1 | 4.067e-2 | 1.058e-2 | 3.126e-3 | T^-0.57 |
+| p90 | 1.883e-1 | 6.310e-2 | 2.178e-2 | 7.521e-3 | T^-0.47 |
+| max | 2.937e-1 | 1.319e-1 | 4.490e-2 | 1.510e-2 | T^-0.43 |
+
+**The 10-17 caveat ("200 of 3,000 sampled") is closed.** Every one of the 3,000 real payoff
+matrices from the `mixed`/`mixed` cell ends below 1.51e-2 at T = 10,000. The tail
+quantiles fall monotonically at every checkpoint, and the worst-case rate (T^-0.43) is the same
+as the Mac's 200-sample estimate. The matrices come from one cell; FP/FP's matrices were not
+frozen-tested.
+
+**Paper:** `MAIN_PAPER.tex` quotes no C3 numbers. Its pooling sentence (the "decision rule"
+justification in the beliefs subsection) rests on C3 qualitatively. If space allows, one
+sentence could cite the frozen-matrix check and the 1.36 L1 per-step equilibrium shift.
+
+**Every LOG number the paper uses is now from the 32-core machine.**
+
+---
+
+## 2026-10-19 (32-core) — V₆ − V₂₄ paired CI; solver reliability sweep-wide; uncontended timing
+
+**Machine:** the 32-core Linux machine with the full Gate B/C data. Every number here replaces
+the Mac (8-core) number from the entry below, so the paper quotes one machine.
+
+**Check against the prior block's prediction:** "run the script on the full sweep to confirm
+it holds sweep-wide". **Holds.** Convergence, miss, ΔV and LP numbers match the 2-cell Mac
+numbers to two figures. **Timing does not transfer**, as explained below.
+
+**Run 1, C4 paired intervals:** `test/analyze_c4.jl` now pairs per-game mean LP values across
+arities. CRN was checked: `params.ic` is identical for M = 6/12/24. It also bootstraps games
+jointly, with 10,000 resamples. Units are √km.
+
+| quantity | value |
+|---|---|
+| V₆ − V₂₄ | **+0.0251 ± 0.0081** (t = 6.1; 1.2%) |
+| V₆ − V₁₂ | +0.0188 ± 0.0098 (t = 3.8) |
+| V₁₂ − V₂₄ | +0.0063 ± 0.0077 (t = 1.6, **not resolved**) |
+| V_cont (Richardson) | 2.0742, bootstrap [2.058, 2.091] |
+| V₆ to V_cont | 1.5%, bootstrap [0.92, 2.12]% |
+| ratio of successive differences | 0.34, bootstrap **[0.02, 1.30]** |
+| per-game CI on V_M | ±0.011–0.013 (the old per-step ± was 0.026) |
+
+**Correction to 09-17:** "shrinks by 0.34 per doubling, faster than O(h_M)'s 0.50" is not
+supported. The ratio's interval spans 0.02–1.30 and includes 0.5. What holds is that V
+decreases significantly from 6 to 12 and from 6 to 24, then flattens below resolution. That is
+consistent with the bound, but the rate is not pinned. The paper is reworded to say this.
+The table ± is now per game, which is the correct unit. The per-step ± was wider: most
+step-level variance is within a game and averages out.
+
+**Run 2, solver reliability over all 51 six-vertex cells:** `test/analyze_solver.jl` now
+discovers every cell in `test/results/n30/` and reports the 25-cell tournament separately.
+
+| quantity | tournament (25 cells) | all 51 cells |
+|---|---|---|
+| solves converged | **900,000 / 900,000** (Wilson lb 99.9996%) | 1,835,999 / 1,836,000 |
+| escalated to AL | 0 | 0 |
+| terminal miss | median 4.55e-12, p95 1.23e-11, max 1.84e-7 km | max 3.31e-7 km |
+| max per-segment ΔV | 0.0336 km/s (60× under the cap) | same |
+| L-BFGS iterations | median 56, p95 94 | same |
+| LP cert violation | median 3.0e-15, max 1.3e-12, 0 > 1e-8, 0 fallbacks (75,000 LPs) | max 1.8e-12 (153,000) |
+
+The one failure is in `p1_regret_matching_p2_mixed`, game 16, step 21, P2, vertex 1. It hit
+the 2,000-iteration cap with miss 1.6e-12 km and ΔV 5.6e-6 km/s. It had reached its target,
+so only the flag fails, likely from the non-smooth exact penalty near Δv ≈ 0. It is harmless,
+and it is outside the tournament.
+
+**Timing: the recorded `t_solve` is contention-dominated.** In-sweep, with 32 games on 32
+threads, the median solve is 195 ms and the median step 2.60 s (max 11.9 s, margin ≥ 49×).
+That is not a single-core figure. New `test/bench_step.jl` (`-t 1`, mixed/mixed, 5 games ×
+30 steps, warm-up discarded) measures uncontended: **11.6 ms per solve (p95 20.7), 0.156 s
+per step (p95 0.187, max 0.669)**, against 583 s executed, so a margin of **≥ 870×** (median
+3,743×). The Mac's "0.54 s / ≥ 123×" was also contended, by 8 threads. The paper now quotes
+the uncontended number, plus "no step over 12 s even with 32 games sharing the processor".
+
+**Paper (`MAIN_PAPER.tex`):** abstract and §Solver now use the tournament figures (900,000
+solves, 75,000 LPs) and the uncontended timing. §Lifting has the paired CIs and bootstrap
+intervals, and its red TODO is removed. The table ± is per trial. **One red marker remains:**
+the ISS keep-out citation.
+
+**Still from the Mac:** the 10-17 C3 tail (FP on frozen matrices). Re-run `analyze_c3.jl`
+here before quoting it.
+
+---
+
 ## 2026-10-19 — solver reliability re-measured on the current pipeline; paper step 3 drafted
 
 **Why re-measure:** the reliability numbers the docs quoted did not come from the pipeline

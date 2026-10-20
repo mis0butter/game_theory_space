@@ -41,12 +41,16 @@ function cell_stats(n, p1, p2)
     V   = Float64[]
     sep = Float64[]
     cert = Float64[]
+    Vg  = Float64[]                     # per-game mean LP value, for pairing across arities
+    ic  = Any[]                         # realized IC draw, to verify CRN before pairing
     for g in gv
         s = Float64[]
+        vg = Float64[]
         for k in eachindex(g.p1_state)
             si = g.p1_state[k].solve_info
             if !isempty(g.p1_state[k].cost) && hasproperty(si, :lp) && si.lp !== nothing
                 push!(V, si.lp.V)
+                push!(vg, si.lp.V)
                 push!(cert, si.lp.cert_violation)
             end
             r1, r2 = g.p1_state[k].rv_chosen, g.p2_state[k].rv_chosen
@@ -54,8 +58,10 @@ function cell_stats(n, p1, p2)
             append!(s, [norm(r1[i, 1:3] - r2[i, 1:3]) for i in axes(r1, 1)])
         end
         isempty(s) || push!(sep, mean(s))
+        push!(Vg, mean(vg))
+        push!(ic, g.params[1].ic)
     end
-    (; V, sep, cert, n_games = length(gv))
+    (; V, sep, cert, Vg, ic, n_games = length(gv))
 end
 
 meanci(v) = (mean(v), 1.96 * std(v) / sqrt(length(v)))
@@ -108,6 +114,49 @@ function main()
         @printf("  implied Lipschitz constant L ≈ %.4f  (bound: |V_M - V_cont| <= L h_M)\n", L̂)
     else
         println("\n  (a third arity is needed before the ratio and Richardson extrapolation)")
+    end
+
+    # ---- paired intervals on the value differences
+    # The table's ± treats all 3,000 step values as independent; steps within a game
+    # are correlated, so it understates the uncertainty. The honest unit is the game:
+    # under CRN, game k shares its ICs across arities, so per-game mean values pair.
+    println("\n" * "="^84)
+    println("PAIRED VALUE DIFFERENCES (unit = game; CRN pairs game k across arities)")
+    println("="^84)
+    st = Dict(n => S[(n, ("mixed", "mixed"))] for n in avail)
+    for n in avail
+        @printf("  CRN check M=%-2d vs M=%-2d: %s\n", n, avail[1], st[n].ic == st[avail[1]].ic ? "ICs identical" : "ICs DIFFER — pairing invalid")
+    end
+    for n in avail
+        v, h = meanci(st[n].Vg)
+        @printf("  V_%-2d per-game: %.4f ± %.4f   (per-step ± was %.4f)\n", n, v, h, meanci(st[n].V)[2])
+    end
+    for (a, b) in [(avail[i], avail[j]) for i in eachindex(avail) for j in i+1:length(avail)]
+        d = st[a].Vg .- st[b].Vg
+        se = std(d) / sqrt(length(d))
+        @printf("  V_%-2d - V_%-2d = %+.4f ± %.4f  (t = %+.1f; %.2f%% of V_%d; unpaired ± would be %.4f)\n",
+                a, b, mean(d), 1.96se, mean(d) / se, 100mean(d) / mean(st[b].Vg), b,
+                1.96sqrt(var(st[a].Vg) / length(d) + var(st[b].Vg) / length(d)))
+    end
+    if length(avail) >= 3
+        # bootstrap over games (jointly across arities, preserving the pairing)
+        a, b, c = avail[end-2], avail[end-1], avail[end]
+        hb, hc = covering_radius(b), covering_radius(c)
+        rng = MersenneTwister(2026)
+        N = length(st[a].Vg)
+        Vc = Float64[]; dist = Float64[]; ratio = Float64[]
+        for _ in 1:10_000
+            ix = rand(rng, 1:N, N)
+            va, vb, vc = mean(st[a].Vg[ix]), mean(st[b].Vg[ix]), mean(st[c].Vg[ix])
+            vcont = vc + (vc - vb) * hc / (hb - hc)
+            push!(Vc, vcont); push!(dist, 100abs(va - vcont) / abs(vcont))
+            push!(ratio, abs(vc - vb) / abs(vb - va))
+        end
+        qq(v) = (quantile(v, 0.025), quantile(v, 0.975))
+        @printf("\n  bootstrap (10,000 resamples of games):\n")
+        @printf("    V_cont            [%.4f, %.4f]\n", qq(Vc)...)
+        @printf("    V_%d to V_cont    [%.2f%%, %.2f%%]\n", a, qq(dist)...)
+        @printf("    diff ratio        [%.2f, %.2f]   (O(h_M) predicts 0.50)\n", qq(ratio)...)
     end
 
     # ---- does the headline survive refinement?
