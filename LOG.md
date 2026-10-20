@@ -6,6 +6,52 @@ identifier), what was decided, what was measured, what is predicted for the next
 
 ---
 
+## 2026-10-20 (32-core) — paper figures: old CDC figures regenerated, two new ones
+
+**Run:** new `test/figures_paper.jl`. It reads the Gate B and B6 cells, plus one fresh 10-step
+mixed/mixed game run unslimmed for F1. It writes true-size vector PDFs to
+`Game_Theory_Space_ECC_2027/images/fig_*.pdf` (15–29 KB each) and PNG previews to
+`figures/paper/`. The font is Nimbus Roman (Times). There is one fixed color per strategy,
+with line style as the redundant cue.
+
+**Value check:** the S = 30 heatmap reproduces the 09-02 5×5 table cell for cell, and the
+row and column means (6.07 / 4.82) match. F6's whole-game paired gains are +0.735 and −0.254,
+matching the contrast table. F1's candidate endpoints lie on the hexagon to within 6.5e-12 km.
+
+| fig | what | regenerates |
+|---|---|---|
+| F1 `fig_game_step` | one game at s = 2/5/10, in the evader-reference RIC frame; line width = Nash weight | `k_replan_*.png`, whose widths were pre-D1 weights. **Swapped into the paper as Fig. 1**, with a rewritten caption |
+| F2 `fig_heatmap` | 5×5 mean separation over the first S = 5/10/30 steps, each window on its own color scale | `MC_results_late_game_heatmap.png` |
+| F3 `fig_boxplot` | per-game separation by evader and by pursuer strategy, pooled over opponents (n = 500 per box) | `..._boxplot.png`, which boxed 5 cell means per box |
+| F4 `fig_dv_vs_sep` | executed ΔV per player vs mean separation, one point per matchup | `..._delta_v_vs_distance.png` |
+| F5 `fig_price_of_safety` | per-step separation, log y: (a) vs fixed-vertex evaders (600 games), (b) vs a minimax evader | new |
+| F6 `fig_learning` | (a) per-step separation for the 2×2 of minimax/FP; (b) paired FP − minimax gap per step | new |
+
+**Definitional changes from the CDC figures:**
+- The metric is **mean separation** (the paper's metric), not "last-quarter game value".
+- The windows are the first S steps of the 30-step games. This is exact, because nothing
+  in a step depends on the total length.
+- F3 boxes per-game values, not cell means.
+
+**New observations (from figures, not yet in the text):**
+- *The opening approach dominates short windows.* Separation is ≈36 km at step 1 and
+  ≈4 km by step 4. S = 5 and S = 10 means (15 km, 9 km) are mostly the approach, so the S = 30
+  game is the meaningful one.
+- *F5:* FP-greedy tracks the oracle step for step. Both cross the 0.2 km hard-capture line
+  at about step 8 and settle around 0.1 km. The minimax pursuer settles around 3.8 km. Against a
+  minimax evader all three pursuers sit on top of each other at about 3 km.
+- *F6:* the FP evader's gain over a minimax pursuer opens by step 3 and holds at 0.5–1.1 km.
+  Against an FP pursuer it is positive until about step 7, then turns negative and stays there
+  (−0.4 to −0.8 km). **The sign reversal is a mid-game effect, appearing once the pursuer's
+  beliefs have accumulated.**
+- *F4, executed ΔV (first numbers for Gate B):* FP evaders spend less than non-FP evaders
+  (150–235 vs 239–266 m/s over 30 steps). Pursuers spend 280–350 m/s. These are cell means
+  without intervals, so they are **not paper-ready** as numbers.
+
+**Not done:** none of F2–F6 is in the `.tex` yet; the choice depends on page budget.
+
+---
+
 ## 2026-10-19 (32-core) — C3 re-run here; the frozen-matrix tail now covers all 3,000 matrices
 
 **Run:** `test/analyze_c3.jl` on the original Gate B cells (no new sweep). It ran twice: once

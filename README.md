@@ -83,8 +83,9 @@ covers the circle stage game, not the continuous closed loop. A solver paragraph
 real-time margin re-measured. Capture definitions and rates. Price of safety. The
 sign-reversal table with intervals.
 
-**4. Figures and tables.** No plotting scripts exist yet for any Gate B/C result. Most of that
-data is on the 32-core machine.
+**4. Figures and tables.** `test/figures_paper.jl` makes six PDFs in
+`Game_Theory_Space_ECC_2027/images/fig_*.pdf` (LOG 10-20). Fig. 1 is swapped to the new render.
+Still to decide: which of F2–F6 go in, given the page budget.
 
 **5. Submission checks.** Page count (LaTeX is not installed here); the affiliation footnote
 lists ² but no author has it; three incomplete bib entries (`albrechtReasoningHypotheticalAgent`,

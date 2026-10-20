@@ -205,25 +205,9 @@ To avoid the issues of equilibrium non-existence and deterministic strategies, w
 
 \begin{figure*}[!t]
     \centering
-    \begin{subfigure}{0.32\linewidth}
-        \centering
-        \includegraphics[width=\linewidth]{images/k_replan_1.png}
-        \caption{Game step $s = 2$ }
-        \label{fig:k_replan_1}
-    \end{subfigure}
-    \begin{subfigure}{0.32\linewidth}
-        \centering
-        \includegraphics[width=\linewidth]{images/k_replan_5.png}
-        \caption{Game step $s = 5$ }
-        \label{fig:k_replan_5}
-    \end{subfigure}
-    \begin{subfigure}{0.32\linewidth}
-        \centering
-        \includegraphics[width=\linewidth]{images/k_replan_10.png}
-        \caption{Game step $s = 10$}
-        \label{fig:k_replan_10}
-    \end{subfigure}
-    \caption{\textbf{Receding-horizon game, where blue shows the evader's path, and red represents the pursuer's.} The inertial frame's $x$, $y$, and $z$ axes are represented by the red, blue, and green arrows respectively. At each game step $s$, both players generate candidate trajectories, form the matrix game, and compute mixing weights. The solid lines represent the traveled trajectories in past game steps. For the current step, the thickness of the dashed lines represents each candidate trajectory's weight, and the spheres represent the chosen propagated states. }
+    \includegraphics[width=\linewidth]{images/fig_game_step.pdf}
+    % previous CDC render (pre-D1 weights): images/k_replan_{1,5,10}.png
+    \caption{\textbf{One mixed vs.\ mixed game at steps $s = 2$, 5 and 10,} shown in the local frame of the evader's reference orbit (in-track, cross-track, radial). Solid lines are the paths flown in earlier steps; dashed lines are the current step's six candidates per player, with width proportional to that player's equilibrium weight; dots mark the current positions; the gray hexagon holds the targets one horizon ahead. The first panel shows the pursuer's approach from about 35~km above; the later panels zoom in on the hexagon.}
     \label{fig:k_replan_all}
     \vspace{-1em}
 \end{figure*}
