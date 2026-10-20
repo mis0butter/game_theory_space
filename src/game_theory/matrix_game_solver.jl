@@ -617,12 +617,14 @@ function choose_strategies!(players, mixing_weights, rng, params, game)
         chosen[1] = sample(rng, ProbabilityWeights(w))
 
     elseif p1_strategy == "Meta_greedy"
-        predicted_v_probs = predict_opponent_vertices(players[1], players[2])
+        predicted_v_probs = predict_opponent_vertices(players[1], players[2];
+                                                      fp_vertex = fp_vertex_of_opponent(players, game, 1))
         expected_costs = players[1].cost * predicted_v_probs
         chosen[1] = argmax(expected_costs)
 
     elseif p1_strategy == "Meta_mixed"
-        predicted_v_probs = predict_opponent_vertices(players[1], players[2])
+        predicted_v_probs = predict_opponent_vertices(players[1], players[2];
+                                                      fp_vertex = fp_vertex_of_opponent(players, game, 1))
         meta_expected_costs = players[1].cost * predicted_v_probs
         w = meta_expected_costs .- minimum(meta_expected_costs) .+ 1e-6
         chosen[1] = sample(rng, ProbabilityWeights(w))
@@ -679,7 +681,8 @@ function choose_strategies!(players, mixing_weights, rng, params, game)
         # to chosen[2]. Both dimensions are 6, so it silently produced a plausible
         # index instead of erroring. (2) `argmin` was wrong: players[2].cost = -A, so
         # maximizing it is what minimizes separation. Now mirrors FP_greedy exactly.
-        predicted_v_probs = predict_opponent_vertices(players[2], players[1])
+        predicted_v_probs = predict_opponent_vertices(players[2], players[1];
+                                                      fp_vertex = fp_vertex_of_opponent(players, game, 2))
         expected_costs = players[2].cost' * predicted_v_probs
         chosen[2] = argmax(expected_costs)
 
@@ -687,7 +690,8 @@ function choose_strategies!(players, mixing_weights, rng, params, game)
         # D5: transpose added, and the weight formula flipped to match FP_mixed --
         # it previously used `maximum(...) .- ec`, decreasing in expected cost, i.e.
         # the opposite of the correct branch directly above it.
-        predicted_v_probs = predict_opponent_vertices(players[2], players[1])
+        predicted_v_probs = predict_opponent_vertices(players[2], players[1];
+                                                      fp_vertex = fp_vertex_of_opponent(players, game, 2))
         meta_expected_costs = players[2].cost' * predicted_v_probs
         w = meta_expected_costs .- minimum(meta_expected_costs) .+ 1e-6
         chosen[2] = sample(rng, ProbabilityWeights(w))
@@ -861,15 +865,61 @@ function update_beliefs!(game, players, γ1 = 1.0, γ2 = γ1)
     # P2 observes P1's choice → update P2's belief about P1
     players[2].fp_belief[players[1].chosen] += 1
 
-    # Bayesian update of meta-strategy belief
-    update_strategy_belief!(players[1], players[2])
-    update_strategy_belief!(players[2], players[1])
+    # Bayesian update of meta-strategy belief. `game` still holds only PREVIOUS steps here
+    # (this step is pushed after compute_states_nash returns), so `own_counts` is exactly
+    # the belief an FP opponent held when it chose this step's vertex.
+    update_strategy_belief!(players[1], players[2]; fp_vertex = fp_vertex_of_opponent(players, game, 1))
+    update_strategy_belief!(players[2], players[1]; fp_vertex = fp_vertex_of_opponent(players, game, 2))
 
 end
 
 ## ====================================================================
 
-function update_strategy_belief!(p_self, p_opponent)
+"""
+    own_counts(game, idx, n)
+
+The **FP opponent type's** belief about player `idx`: a uniform prior `ones(n)` plus the
+counts of `idx`'s OWN past choices. A plain (γ = 1) fictitious player starts from
+`ones(n)` and adds one per observation, so this is exactly its belief, computed from
+public history; the reasoner never reads the opponent's private `fp_belief`.
+
+Must be called while `game` holds only previous steps, i.e. inside `compute_states_nash`,
+before this step is pushed. The type is misspecified, by design, against a discounting
+(γ < 1) or differently-initialized opponent.
+"""
+function own_counts(game, idx, n)
+    c = ones(n)
+    for st in (idx == 1 ? game.p1_state : game.p2_state)
+        c[st.chosen] += 1
+    end
+    c
+end
+
+"""
+    fp_type_vertex(p_opp, opp_idx, f)
+
+Vertex an `FP_greedy` opponent at index `opp_idx` plays when its belief counts are `f`.
+Mirrors the `FP_greedy` branches of `choose_strategies!` operation for operation (P1
+contracts `cost`, P2 `cost'`; same normalization, same `argmax` tie-breaking), so the
+prediction is exact, not approximately equal.
+"""
+function fp_type_vertex(p_opp, opp_idx, f)
+    q = f ./ sum(f)
+    argmax(opp_idx == 1 ? p_opp.cost * q : p_opp.cost' * q)
+end
+
+"FP-type prediction of player `self_idx`'s opponent, or `nothing` if FP is not a tracked type."
+function fp_vertex_of_opponent(players, game, self_idx)
+    "FP_greedy" in players[self_idx].tracked_strategies || return nothing
+    opp = 3 - self_idx
+    fp_type_vertex(players[opp], opp, own_counts(game, self_idx, length(players[opp].weights)))
+end
+
+export own_counts, fp_type_vertex, fp_vertex_of_opponent
+
+## ====================================================================
+
+function update_strategy_belief!(p_self, p_opponent; fp_vertex = nothing)
 
     # 1. CALCULATING THE LIKELIHOODS: P(v_t | s)
     # How likely was the opponent's move if they were using strategy 's'?
@@ -891,6 +941,11 @@ function update_strategy_belief!(p_self, p_opponent)
         elseif s isa Int
             # P(v_t | s) = 1 if v_t == k, else 0
             likelihoods[i] = (p_opponent.chosen == s) ? 1.0 : 0.0
+
+        elseif s == "FP_greedy"
+            # level-2 type: the opponent best-responds to its count of MY past moves
+            fp_vertex === nothing && error("FP_greedy type tracked but no fp_vertex passed")
+            likelihoods[i] = (p_opponent.chosen == fp_vertex) ? 1.0 : 0.0
 
         else
             likelihoods[i] = 1.0 / length(p_opponent.weights) # fallback
@@ -915,7 +970,7 @@ end
 
 ## ====================================================================
 
-function predict_opponent_vertices(p_self, p_opponent)
+function predict_opponent_vertices(p_self, p_opponent; fp_vertex = nothing)
 
     n_v = length(p_opponent.weights)
     predicted_v_probs = zeros(n_v) # This will be our final 'p' vector
@@ -940,6 +995,9 @@ function predict_opponent_vertices(p_self, p_opponent)
             if s >= 1 && s <= n_v
                 v_probs[s] = 1.0
             end
+        elseif s == "FP_greedy"
+            fp_vertex === nothing && error("FP_greedy type tracked but no fp_vertex passed")
+            v_probs[fp_vertex] = 1.0
         else
             v_probs .= 1.0 / n_v # fallback
         end

@@ -14,7 +14,11 @@ Guidance for Claude Code when working in this repository. When responding to pro
   citation (last red marker), then figures (step 4), then fit the page limit** (~5,200 words;
   probably over 6 pages). The to-do list is in `README.md` § Paper to-do.
 - **Review gaps G1–G3 are closed in the text.** G2 is handled by Proposition 1 plus a scope paragraph.
-- **Open defects:** D12 (deferred, off the hot path), D13 (FP opponents unidentifiable).
+- **Open defects:** D12 (deferred, off the hot path). D13 closed 2026-10-20 (FP learner type added).
+- **New since Gate C (2026-10-20):** type-based reasoning (`Meta_greedy`, with the FP type).
+  18-cell sweep in `test/results/n30/` (`test/run_meta.jl`, `test/analyze_meta.jl`). It is
+  the strongest pursuer (column mean 3.84 km vs FP's 4.82). As evader it ties FP on
+  separation but cuts soft capture against an FP pursuer from 91% to 9%. Not yet in the paper.
 - **Machine:** work is now on the **32-core Linux machine**, which has the full Gate B/C results
   in `test/results/`. The 8-core Mac (used 10-17 to 10-19) only had `mixed`/`mixed` and
   `FP_greedy`/`FP_greedy`. Solver reliability, C4 CIs and C3 were re-run here on 10-19. Every

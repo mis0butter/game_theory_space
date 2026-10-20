@@ -186,7 +186,9 @@ function init_game(
     t_ref_E, rv_ref_E = prop_kepler_tof_Nseg(rv_0_E, zeros(params.n_seg_horizon, 3), params.n_seg_horizon, params.t_horizon / params.n_seg_horizon, params.mu)
 
     # save player state and control hists 
-    tracked_strategies = ["mixed", "greedy", "random", (1:n_vertices)...]
+    # "FP_greedy" (last, so earlier indices are unchanged) is the level-2 learner type:
+    # see `own_counts` / `fp_type_vertex`. Only Meta_* players read this belief.
+    tracked_strategies = ["mixed", "greedy", "random", (1:n_vertices)..., "FP_greedy"]
     strategy_belief = ones(length(tracked_strategies)) / length(tracked_strategies)
     # C4: arity is now derived from `n_vertices` everywhere. The four sites that used to
     # hardcode 6 were this one, `tracked_strategies` above, `polygon_vertices`, and the

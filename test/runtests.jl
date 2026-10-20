@@ -718,4 +718,33 @@ end
     @test isapprox(game_cost(p̂, q̂, A), s.V; atol = 5e-2 * max(1, maximum(abs, A)))
 end
 
+@testset "D13: the FP learner type is predicted exactly and identified" begin
+    # A plain FP opponent's belief about me is ones(n) plus MY past choices, so the
+    # level-2 type rebuilds it from public history (own_counts) and must reproduce the
+    # opponent's move exactly -- not approximately -- at every step, in both roles.
+    for (p1, p2, meta) in (("FP_greedy", "Meta_greedy", 2), ("Meta_greedy", "FP_greedy", 1))
+        g, _ = redirect_stdout(devnull) do
+            run_game(MersenneTwister(21), 12, p1, p2; disperse = true)
+        end
+        fp = 3 - meta
+        St(i) = i == 1 ? g.p1_state : g.p2_state
+        types = St(meta)[1].tracked_strategies
+        ifp = findfirst(==("FP_greedy"), types)
+        @test ifp == length(types)          # appended last: earlier type indices unchanged
+        for k in eachindex(g.p1_state)
+            f = ones(6)
+            for j in 1:k-1
+                f[St(meta)[j].chosen] += 1
+            end
+            @test fp_type_vertex(St(fp)[k], fp, f) == St(fp)[k].chosen
+            k > 1 && @test f == St(fp)[k-1].fp_belief   # == the opponent's private belief
+        end
+        b = St(meta)[end].strategy_belief
+        @test b[ifp] == maximum(b)
+        @test b[ifp] > 0.99
+        # a tracked FP type with no prediction must fail loudly, never fall back to uniform
+        @test_throws ErrorException predict_opponent_vertices(St(meta)[end], St(fp)[end])
+    end
+end
+
 end # top-level testset

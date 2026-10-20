@@ -6,6 +6,217 @@ identifier), what was decided, what was measured, what is predicted for the next
 
 ---
 
+## 2026-10-20 — type-based reasoning written into `MAIN_PAPER.tex`
+
+**Paper edits:**
+- *Abstract:* now covers three strategies: minimax, FP and type-based.
+- *Intro:* the motivation paragraph is rewritten, and contribution 3 includes the
+  type-based player.
+- *Related work:* "Mixed Strategies and Type-Based Reasoning" is rewritten against the
+  10-20 literature report.
+- *Methods:* new §"Type-Based Opponent Reasoning" (`sec:types`): library, exact FP type,
+  Bayes update (`eq:type_posterior`) with the 1e-4 floor, and its stated assumptions.
+  Strategy 6 is added.
+- *Setup:* the 18 extra matchups are described.
+- *Results:* new §"Type-Based Reasoning" (`sec:typeresults`), with Table `tab:types` in
+  two blocks (pursuer and evader comparisons). It covers identification, the pursuer
+  gains, evader capture avoidance, out-of-set behavior and self-play.
+- *Discussion:* now has four limitations; the future-work item on type reasoning is
+  replaced with parameterized types and belief shaping.
+- "FP is the best evader and pursuer" is qualified to "among the five tournament
+  strategies".
+
+**Bold rule in `tab:types`:** bold marks the best entry plus anything with a non-significant
+paired difference from it. The type-based-opponent rows were checked separately:
+- (a) Meta pursuer − FP pursuer vs a Meta evader = −0.286 ± 0.066;
+- (b) Meta evader − minimax evader vs a Meta pursuer = −0.398 ± 0.070.
+
+Both are significant, so a single bold entry in each row is correct.
+
+**Solver totals re-run with the Meta cells** (`analyze_solver.jl`, 69 cells):
+- **2,484,000 solves, 2 non-converged.** Both hit the iteration cap after reaching their
+  vertex: miss 1.6e-12 km (regret_matching cell) and 1.4e-12 km (`p1_Meta_greedy_p2_greedy`,
+  game 20, step 24).
+- Max miss over all cells 4.25e-7 km.
+- LP certificate max 1.8e-12 over 207,000 LPs.
+
+The tournament figures are unchanged.
+
+**bib (`refs.bib`):**
+- 13 entries added from the report (only those tagged [V] or [V-partial]).
+- `peters2022learning` upgraded to RSS 2022 with DOI.
+- The `hanlong…` entry's swapped given/family names fixed. It now renders as Zhang et
+  al.; the key is unchanged.
+
+**Not compiled.**
+
+---
+
+## 2026-10-20 (32-core) — Meta sweep: type reasoning is a much stronger pursuer, and an evader that avoids capture
+
+**Run:** `test/run_meta.jl`, 18 cells × 100 × 30, **75.8 min** on 32 threads. CRN was
+verified against every Gate B / B6 cell compared below. Analysis is in
+`test/analyze_meta.jl`. Meta = `Meta_greedy` with the FP-learner type. Contrasts are paired,
+± is the 95% CI.
+
+**Prediction check (LOG block below, written before the run): 1, 2 and 3 FAILED, 4
+confirmed, 5 confirmed and exceeded, 6 recorded.**
+
+1. **FAILED, in sign.** Meta evader vs FP pursuer: Meta − minimax = **−0.132 ± 0.042**
+   (t = −6.2). This is still a loss, but half of FP's −0.254, and Meta − FP = +0.123 ± 0.047.
+   The FP type *was* identified (posterior 0.82 at step 5, 1.000 at step 30). So knowing
+   the pursuer's next move exactly does **not** buy mean separation. The capture data
+   below show what it does buy.
+2. **FAILED.** Meta evader vs minimax pursuer: **+0.627 ± 0.086** (t = +14.3), close to
+   FP's +0.735 (Meta − FP = −0.108 ± 0.092). The minimax type *was* identified (0.97 at
+   step 10). So a best response to the current Nash mixture gains as an evader, even though
+   the oracle pursuer (the same move) lost against a minimax evader in B6. The mechanism is
+   unexplained. Do not claim it.
+3. **FAILED.** Meta evader vs greedy pursuer: −0.070 ± 0.078 (null), with greedy identified.
+4. **CONFIRMED.** Meta pursuer vs fixed-vertex evaders recovers **97.9–99.4%** of the oracle's
+   advantage, at least FP's at every vertex, with 100% hard capture. It identifies faster:
+   it plays the oracle's move in 79% of step-2 decisions vs FP's 50%, and in 100% from step 3
+   (FP: from step 4).
+5. **CONFIRMED and exceeded.** Out-of-set opponents cause no collapse; Meta *gains*. As
+   pursuer, FP_mixed −0.882 ± 0.073 and hedge −0.402 ± 0.062 vs the minimax pursuer; as
+   evader vs FP_mixed, +0.641 ± 0.124. **The posterior falls back to the `random` type**:
+   the final-step most-likely type is random in 90–100% of out-of-set games, so the uniform
+   type acts as a catch-all.
+6. Meta vs Meta: separation 4.45 ± 0.14, the lowest of any self-play pair (FP/FP 4.61,
+   mixed/mixed 4.98). Hard capture is 6% [3, 12], vs FP/FP 18%. The evader's posterior
+   settles on mixed (72) or FP (28); the pursuer's on random (95).
+
+**Headline 1 — the pursuer side is dramatic.** The Meta pursuer column mean is **3.84 km**,
+vs FP_greedy's 4.82 (the previous best) and minimax's 5.21. Paired, Meta minus the minimax
+pursuer:
+- vs FP_greedy evader: **−3.044 ± 0.073**, hard capture **100%**;
+- vs greedy evader: −2.299 ± 0.060;
+- vs FP_mixed evader: −0.882;
+- vs random evader: −0.459;
+- vs minimax evader: **−0.134 ± 0.058** (t = −4.5). It gains even against a randomizer,
+  where the oracle lost (+0.117). It ties FP here (−0.020 ± 0.045).
+
+**Type reasoning turns FP's weakness into a capture**: a learner is fully predictable to a
+reasoner that models it.
+
+**Headline 2 — the evader side is a safety result, not a separation result.** The Meta
+evader row mean is 6.08, tying FP_greedy's 6.07. But against the pursuers it predicts
+exactly, it almost never gets close:
+
+| pursuer | evader | soft capture (1 km) | median closest approach | late-game sep |
+|---|---|---|---|---|
+| FP_greedy | minimax | 91% [84, 95] | 0.66 km | 2.87 |
+| FP_greedy | FP_greedy | 100% [96, 100] | 0.65 | 2.39 |
+| FP_greedy | **Meta** | **9% [5, 16]** | **1.61** | 2.55 |
+| greedy | minimax | 91% | 0.71 | 3.10 |
+| greedy | **Meta** | **1% [0, 5]** | **1.57** | 2.82 |
+| mixed | minimax | 96% | 0.64 | 3.00 |
+| mixed | **Meta** | **53% [43, 62]** | 0.95 | 3.70 |
+| FP_mixed (out of set) | Meta | 69% | 0.59 | 4.37 |
+
+Knowing the pursuer's move lets the evader dodge every close pass while holding a
+moderate, slightly lower mean distance. The gain is in the worst case, not the average.
+The concave payoff √(d + ε) weights close approaches, so this is consistent with the
+evader optimizing the game's actual objective. Against a stochastic, out-of-set pursuer
+(FP_mixed) the dodge disappears.
+
+**Pursuit–evasion asymmetry (hypothesis, not tested).** Prediction helps the pursuer far
+more than the evader. Knowing the evader's target lets the pursuer go there. Knowing the
+pursuer's target leaves the evader five alternatives on the same hexagon, which differ
+little in mean distance but let it avoid the closest pass.
+
+**For the paper:**
+- Report Meta as the strongest pursuer (column mean 3.84) and FP's predictability as the
+  reason FP loses to it.
+- Report the evader result as capture avoidance (91% → 9% soft capture vs FP), not as
+  separation.
+- State plainly that the planned headline (evader turns FP's −0.254 positive) failed.
+
+---
+
+## 2026-10-20 — D13 closed: FP learner type added to type-based reasoning; predictions for the Meta sweep
+
+**Code:**
+- `tracked_strategies` gains `"FP_greedy"`, appended last so earlier type indices are unchanged.
+- New `own_counts(game, idx, n)` builds `ones(n)` plus the player's OWN past choices from
+  public game history. This is exactly a plain (γ = 1) FP opponent's belief about that
+  player; the reasoner never reads the opponent's private `fp_belief`.
+- `fp_type_vertex` mirrors the `FP_greedy` branch operation for operation, so ties resolve
+  identically.
+- `update_strategy_belief!` and `predict_opponent_vertices` take a `fp_vertex` keyword. A
+  tracked FP type with no prediction throws rather than falling back to uniform.
+
+**D13's premise was wrong.** It said the FP type needs the opponent's unobservable
+`fp_belief`. For plain FP that belief is a deterministic function of my own history.
+
+**Verified:**
+- *Exactness:* new testset, both roles, 12 steps. The type's prediction equals the FP
+  opponent's actual move at every step, and `own_counts` equals the opponent's private
+  belief bitwise. The posterior reaches > 0.99 on the FP type.
+- *Test suite:* 3,428 / 3,428 pass (was 3,369).
+- *Inertness:* new `test/check_meta_inert.jl` re-runs games 1–8 of `mixed`/`mixed`,
+  `FP_greedy`/`FP_greedy` and `FP_greedy`/`mixed` with the sweep's seeds. They are
+  **bitwise identical** to the saved files (chosen, rv_chosen, cost, fp_belief), because
+  only Meta_* strategies read `strategy_belief`.
+
+**Positioning correction (author's point):** every receding-horizon game rebuilds its matrix
+each step (Peters 2022 included), and HBA's stochastic Bayesian games already let types
+depend on state. So "types applied to a time-varying matrix" is **not** a novelty claim.
+What remains:
+- learning that carries across replanning steps (Peters solves each step memorylessly);
+- the C3 point that pooled vertex counts track something unstable while a belief over
+  *rules* tracks something stable;
+- the FP-learner type in the hypothesis set;
+- the application and the price-of-safety measurement.
+
+**Planned run:** `test/run_meta.jl`, 18 cells × 100 trials × 30 steps, with CRN
+(`MersenneTwister(1)` per cell), dispersed ICs and slim saves:
+- `Meta_greedy` evader vs the 5 tournament pursuers;
+- `Meta_greedy` pursuer vs the 5 tournament evaders;
+- `Meta_greedy` pursuer vs fixed-vertex evaders 1–6;
+- `Meta_greedy` vs `Meta_greedy`;
+- `hedge` evader vs `Meta_greedy`, an out-of-set opponent.
+
+**Predicted (written before running):**
+1. **Meta evader vs FP_greedy pursuer:** Meta − minimax evader is **positive and
+   significant**, reversing FP_greedy's −0.254 ± 0.051. Once the FP type is identified, the
+   pursuer's move is known exactly. *This is the headline test. If it is not positive, the
+   idea does not work here.*
+2. **Meta evader vs mixed pursuer:** **well below FP's +0.735**, somewhere in [−0.2, +0.3].
+   Meta identifies the `mixed` type and best-responds to the *current* Nash mixture, which
+   is the oracle's move. B6 showed the oracle gains nothing against a randomizer, because
+   supported vertices are exactly indifferent. If this holds, FP's +0.735 does not come
+   from knowing the opponent's distribution, which is worth a sentence in the paper.
+3. **Meta evader vs greedy pursuer:** **larger than FP's +0.003**, since the greedy type
+   predicts the pursuer's move exactly.
+4. **Meta pursuer vs fixed-vertex evaders:** matches the oracle and **identifies faster than
+   FP** (point types settle in 1–2 steps; FP needed about 5 to match the oracle). Recovery
+   ≥ FP's 97.5–99.4%.
+5. **Out-of-set opponents (FP_mixed, hedge):** smaller gains and no collapse. Meta stays
+   within 0.3 km of the minimax baseline in the same cell.
+6. **Meta vs Meta:** no confident prediction. Neither is in the other's hypothesis set.
+   Report whatever happens, including which type each posterior settles on.
+
+---
+
+## 2026-10-20 — all six figures placed in `MAIN_PAPER.tex`
+
+**Decided (author):** put every figure in now and cut text or figures later, once the page
+count is known.
+
+**Placement:**
+- Heatmap: `figure*`, in Learning vs minimax.
+- Learning, boxplot and ΔV: one column each, in Learning vs minimax.
+- Price of safety: one column, in Price of Safety.
+
+Every figure is referenced in the text (Fig. 1 had no reference before). There is one new
+paragraph in Learning vs minimax: the approach dominates short windows, the reversal starts
+after about step 7, and FP evaders spend less ΔV. The ΔV ranges are quoted as per-matchup means
+**without intervals**; add intervals or soften this before submission. One sentence was added
+to Price of Safety. **Not compiled**; this probably pushes the paper well past 6 pages.
+
+---
+
 ## 2026-10-20 (32-core) — paper figures: old CDC figures regenerated, two new ones
 
 **Run:** new `test/figures_paper.jl`. It reads the Gate B and B6 cells, plus one fresh 10-step
