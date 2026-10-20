@@ -79,9 +79,13 @@ function main()
         v = [cu[c] for cu in curves]
         @printf("  %-12d %14.3e %14.3e %14.3e\n", T, median(v), quantile(v, 0.9), maximum(v))
     end
-    m1, m2 = median([cu[1] for cu in curves]), median([cu[end] for cu in curves])
-    slope = log(m2 / m1) / log(cps[end] / cps[1])
-    @printf("\n  empirical rate over 10 -> 10,000 iterations: NashConv ~ T^%.2f\n", slope)
+    rate(stat) = log(stat([cu[end] for cu in curves]) / stat([cu[1] for cu in curves])) /
+                 log(cps[end] / cps[1])
+    @printf("\n  empirical rate over 10 -> 10,000 iterations: NashConv ~ T^%.2f (median)\n",
+            rate(median))
+    # The tail is what a reviewer asks about: does FP converge on EVERY sampled matrix?
+    @printf("  tail rates: p90 ~ T^%.2f, max ~ T^%.2f\n",
+            rate(v -> quantile(v, 0.9)), rate(maximum))
     println("  (FP in zero-sum games converges; the rate is known to be slow and")
     println("   problem-dependent, which is itself an argument for C2's no-regret learner,")
     println("   whose O(1/sqrt(T)) bound is uniform.)")

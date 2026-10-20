@@ -1,0 +1,71 @@
+
+
+\begin{frame}{Simulation}
+
+    Back to our problem of minimizing fuel consumption along a trajectory, given initial and final target states while subject to dynamics constraints: 
+% 
+    \begin{align}
+        \min_{ \boldsymbol{ \Delta \boldsymbol{v} } }     & \sum_{i=1}^{n} | \Delta \boldsymbol{v}_i | \\ 
+        \text{ subject to }         & \boldsymbol{\Psi}_r ( \boldsymbol{x} ) = \boldsymbol{r}_f - \boldsymbol{r}_{targ} = 0 \\  
+        & \boldsymbol{h}_i = \frac{ \Delta \boldsymbol{v}_i }{ \Delta t_i } - \frac{ T_{max} }{ m_{i-1} } \leq 0 \; \forall \; i = 1 \hdots n 
+    \end{align} 
+    
+\end{frame} 
+
+\begin{frame}{Simulation } 
+
+    By breaking up the trajectory into N segments, we then propagate the Kepler time-of-flight equations through each segment. 
+
+    Each $ \Delta \mathbf{v}_i $ vector in Cartesian space is 3x1. The decision variable for our optimization problem is thus Nx1. 
+
+    The initial guess is also highly critical for converging onto a solution. Lambert targeting was used to construct an initial $ \Delta \mathbf{v} $ guess. 
+    
+\end{frame}
+
+\begin{frame}{Simulation}
+
+    The simulation was set up as targeting problem with 2 spacecraft given the following parameters: 
+
+    \begin{itemize} 
+        \item $ \mu = 398600.4415 \; km^3 s^{-2} $ 
+        \item $ r = 6378.0 \; km $ 
+        \item $ kep_0^P = [ r+400.0, 0.1, -20^\circ, 10.0^\circ, 20.0^\circ, 30.0^\circ ] $ 
+        \item $ kep_0^E = [ r+450.0, 0.2, 10.6^\circ, 40.0^\circ, 0.0, 180.0^\circ ] $ 
+        \item TOF = 2000 s 
+    \end{itemize} 
+    
+\end{frame} 
+
+\begin{frame}{Simulation} 
+
+    \begin{figure}
+        \centering
+        \includegraphics[width=0.7\textwidth]{pres_images/delta_v.png}
+        \caption{\Delta \mathbf{v} minimization}
+        \label{fig:delta_v}
+    \end{figure}
+    
+\end{frame} 
+
+\begin{frame}{Simulation}
+
+    \begin{figure}
+        \centering
+        \includegraphics[width=0.7\textwidth]{pres_images/delta_v2.png}
+        \caption{Varying initial and target states}
+        \label{fig:delta_v2}
+    \end{figure}
+    
+\end{frame} 
+
+\begin{frame}{Simulation}
+
+    \begin{figure}
+        \centering
+        \includegraphics[height=\textheight, angle=90]{pres_images/bad_delta_v1.jpeg}
+        \caption{``Solution"}
+        \label{fig:bad_delta_v}
+    \end{figure}
+
+
+

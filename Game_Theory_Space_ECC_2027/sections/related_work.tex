@@ -1,0 +1,30 @@
+Our work builds upon contributions in numerical methods for spacecraft trajectory optimization, game-theoretic planning, and multi-agent behavior reasoning. 
+
+% ----------- 
+
+\subsection{Pursuit-Evasion as Optimal Control}
+
+The foundation of spacecraft pursuit-evasion (PE) lies in differential game theory, typically formulated via Hamilton-Jacobi-Isaacs (HJI) to identify saddle-point equilibria \cite{bacsar1998dynamic}. Orbital PE research often relies on linearized Hill-Clohessy-Wiltshire (HCW) dynamics for proximity operations \cite{stupik2012optimal} \cite{innocentiGameTheoreticStrategies2016} \cite{liDimensionreductionSolutionFreetime2019}. Semi-direct numerical methods have been combined with analytical necessary conditions identify equilibria in 3D scenarios \cite{pontani2009numerical}. More recently, high-fidelity strategies have been developed by bifurcating the pursuit process into distinct navigation and acceleration phases, allowing for rigorous analytical thresholds for capture within the HJBI framework \cite{chen_equilibrium_2024}.
+
+Despite these advances, the ``curse of dimensionality" remains a primary bottleneck, as gridding a 12-dimensional state space for two-body games is computationally prohibitive for real-time applications. Efforts have focused on reducing this burden through analytical strategies using Tschauner-Hempel equations \cite{fu_analytical_2025} and reachability analysis \cite{jia_approximate_2025} \cite{venigalla20193}. Linear-quadratic approximate methods have enabled the study of adversarial maneuvers in complex regimes, including zero-sum games in cislunar space \cite{fotiadis_adversarial_2025} and collision avoidance \cite{venigallaCooperativeNonCooperativeApproaches2022}. 
+
+% -------------- 
+
+\subsection{Mixed Strategies and Type-Based Reasoning}
+
+A significant limitation in classical PE literature is the reliance on deterministic (pure) strategies. In highly constrained orbital environments, where $\Delta V$ budgets are comparable, a pure-strategy Nash equilibrium may not exist, or the predicted trajectory may be exploited by an opponent \cite{hanlongResearchStrategiesMultiSpacecraft2024}. Recent advances in robotics have addressed this by ``lifting" continuous games into a discrete space of candidate trajectories or motion primitives \cite{peters2022learning}, which can lead to matrix-game formulations that reduce the online computational burden of trajectory optimization. Learning dynamics such as fictitious play converge to equilibrium when the game itself does not change \cite{perrin_fictitious_2020, harris_rate_1998}; in a receding-horizon game the payoff matrix changes every step, so that guarantee does not carry over. Such mixed-strategy approaches have been successfully applied to multi-spacecraft interception \cite{hanlongResearchStrategiesMultiSpacecraft2024} and games involving safety-constrained robot interactions \cite{krusniak_mixed_2025}. 
+
+% Strategy exploitation has been further extended through type-based reasoning, a Bayesian framework for reasoning about hypothetical agent behaviors \cite{albrechtReasoningHypotheticalAgent}. 
+
+By maintaining a probability distribution over a set of possible choices, an agent can profile an opponent's strategy in real-time. 
+In this work, we project the pursuit-evasion game into a discrete trajectory space defined by the orbital bandwidth and apply this update mechanism to transition from a generic game-theoretic solution to a tailored best-response \cite{swenson_best-response_2018, guan_best_2025}. We provide a framework for adaptation in non-stationary gameplay, specifically within the dynamics of orbital pursuit-evasion.
+
+% A common limitation in the aforementioned works is the reliance on deterministic (pure) strategies. In many orbital scenarios, a pure-strategy Nash equilibrium may not exist, or the resulting trajectory may be easily exploited by an opponent with superior intelligence. To mitigate this, recent robotics research has shifted toward mixed strategies.
+
+% Peters et al. \cite{peters2022learning} utilized the concept of ``lifted games," where players optimize over multiple candidate trajectories simultaneously. By training a reference generator to produce trajectory candidates, they constructed more competitive mixed strategies that reduce the online computational burden of trajectory games. 
+
+% Krusniak explored mixed strategy equilibria arising from coupled constraints on robot interaction problems \cite{krusniak_mixed_2025}. 
+% % 
+% Similarly, Hanlong et al. \cite{hanlongResearchStrategiesMultiSpacecraft2024} established a multi-round interception model using matrix game theory, demonstrating the effectiveness of mixed-strategy Nash equilibria in multi-agent space scenarios through genetic algorithm solvers. Krusniak \cite{krusniak_mixed_2025} further explored these equilibria in the context of safety-constrained robot interactions.
+
+% However, a static mixed strategy may still be sub-optimal if the opponent's tactical preferences are non-stationary or unknown. Our work extends these concepts by incorporating type-based reasoning, a framework popularized by Albrecht and Stone \cite{albrechtReasoningHypotheticalAgent}. By maintaining beliefs over a set of hypothetical agent behaviors (or "types"), an agent can reason about both the relative likelihood of an opponent's strategy and the continuous parameters governing their motion. We project the pursuit-evasion game into a discrete trajectory space and apply this Bayesian update mechanism to allow for real-time adaptation in highly constrained 3D orbital bandwidths.

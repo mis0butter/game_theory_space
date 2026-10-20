@@ -1,0 +1,49 @@
+% ========== 
+% AESTHETICS 
+% ==========
+
+\usetheme[progressbar=frametitle]{metropolis}
+\usepackage{appendixnumberbeamer}
+\usepackage{booktabs}
+\usepackage[scale=2]{ccicons}
+\usepackage{pgfplots}
+\usepgfplotslibrary{dateplot}
+\usepackage{xspace}
+\newcommand{\themename}{\textbf{\textsc{metropolis}}\xspace}
+
+% 1. Define the official UT Burnt Orange
+\definecolor{UTBurntOrange}{RGB}{191, 87, 0}
+\definecolor{UTCharcoal}{RGB}{51, 63, 72} % A great secondary color for text/titles
+
+% 2. Apply the color to Beamer elements
+\setbeamercolor{structure}{fg=UTBurntOrange}        % Changes bullets, numbers, etc.
+\setbeamercolor{title}{fg=UTBurntOrange}            % Changes the main title
+% \setbeamercolor{frametitle}{fg=UTBurntOrange}       % Changes the header of each slide
+\setbeamercolor{palette primary}{bg=white, fg=UTBurntOrange} % For bars/footers
+\setbeamertemplate{progress bar in head/foot}{}
+\setbeamercolor{background canvas}{bg=white}
+
+\setbeamercolor{block title}{bg=UTBurntOrange!10, fg=gray}
+\setbeamercolor{block body}{bg=UTBurntOrange!10, fg=black} % 10% transparency for the body
+
+\setcounter{tocdepth}{1}
+
+
+% ========== 
+% Additional macros 
+% ========== 
+
+\usepackage{algorithmic}
+\usepackage{algorithm}
+% \usepackage{algpseudocode}
+\renewcommand{\figurename}{Fig.}
+\usepackage[font=footnotesize, labelfont={bf, color=structure}]{caption}
+
+\usepackage{setspace}
+
+\usepackage{xcolor}
+
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta}
+
+\usepackage{multirow}

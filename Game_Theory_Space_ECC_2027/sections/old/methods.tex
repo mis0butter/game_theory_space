@@ -57,26 +57,6 @@ Finally, we transform the solution into a probability simplex. This results in m
 
 To play the game, we sample from the mixing weights for each player. To construct the initial guess for the control input, we compute the initial velocity vector required for a Lambert transfer. We divide the velocity into 10 segments for each planning period of the trajectory to set as the initial guess vector. 
 
-% \begin{figure*}[!t]
-%     \centering
-%     \begin{subfigure}{0.48\linewidth}
-%         \centering
-%         \includegraphics[width=\linewidth]{images/k_replan_1.png}
-%         \caption{Body rates $\omega_{body}$ (rad/s) }
-%         \label{fig:omega_bus} 
-%     \end{subfigure}
-%     \hfill
-%     \begin{subfigure}{0.48\linewidth}
-%         \centering
-%         \includegraphics[width=\linewidth]{images/k_replan_5.png}
-%         \caption{Body rates $\omega_{body}$ FFT }
-%         \label{fig:omega_bus_fft} 
-%     \end{subfigure}
-%     \caption{asdf} 
-%     \label{fig:cgs_rigid_body} 
-%     \vspace{-1em}
-% \end{figure*}
-
 \begin{equation}
     \boldsymbol{v}_1, \boldsymbol{v}_2 = 
     % minLambert
@@ -90,21 +70,6 @@ To play the game, we sample from the mixing weights for each player. To construc
     \caption{Caption}
     \label{fig:enter-label}
 \end{figure}
-
-% \begin{figure}[ht!]
-%     \centering
-%     \includegraphics[width=0.9\linewidth]{images/k_replan_5.png}
-%     \caption{Caption}
-%     \label{fig:enter-label}
-% \end{figure}
-
-% \begin{figure}[ht!]
-%     \centering
-%     \includegraphics[width=0.9\linewidth]{images/k_replan_10.png}
-%     \caption{Caption}
-%     \label{fig:enter-label}
-% \end{figure}
-
 
 
 

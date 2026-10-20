@@ -6,6 +6,212 @@ identifier), what was decided, what was measured, what is predicted for the next
 
 ---
 
+## 2026-10-19 — paper merged into one file
+
+The author pasted every section into `MAIN_PAPER.tex`; the `\input{sections/...}` lines are
+now commented out, except for `macros`. A scripted check found every non-blank line of the six
+section files in the merged file, so the step 1 and step 2 edits came through. From now on,
+edit only `MAIN_PAPER.tex`. `sections/*.tex`, other than `macros.tex`, are stale copies.
+
+---
+
+## 2026-10-18 — paper step 2: methods and problem formulation rewritten against the reviews
+
+**Checked against the code first:** `axis_123`, `polygon_vertices`, `stage_cost`,
+`compute_cost_matrices`, `solve_mixed_nash` / `solve_mixed_security_strategy`,
+`nash_certificate`, `update_beliefs!`, `choose_strategies!`, `min_Δv_dist_solve` and
+`prop_kepler_tof_Nseg` (each impulse is applied, then the arc is coasted).
+
+**`prob_form.tex`:**
+- Dynamics stated as Keplerian flow with impulses (R7 #1).
+- Distance `d_k` separated from the payoff `ℓ_k = sqrt(d_k + ε)`, ε = 0.1 km (R7 m1). The paper
+  no longer mentions λ₁/λ₂.
+- Game written as max over the evader, min over the pursuer, with a consistent saddle inequality.
+- Dropped the unenforced bandwidth 𝓑 and feasible set 𝓕, and the red marks. Kept the
+  Sims-Flanagan citation, but as "same transcription" rather than "follows the method".
+
+**`methods.tex`:**
+- Frame given by formula, including ê₁·ê₂ = −sin γ (R5 #1). Vertex formula for r_{v_j}.
+- Trajectory problem as solved: smoothed ΔV plus an exact-penalty *position* miss; LBFGS,
+  forward-mode AD, Lambert initial guess; cap verified afterward (R7 #1, R8 #2).
+- Indices: j for the evader, l for the pursuer (R8 #3).
+- Both LPs with explicit shifts and value recovery; "game value" reserved for V; saddle-point
+  certificate stated (R7 #2–3, #6; R8 #1).
+- Beliefs FP-only, with distinct symbols: q̂ is the evader's belief, p̂ the pursuer's (R7 m2,
+  R8 #4). The pooling assumption is stated as "a stable decision rule", per C3.
+- New Strategies subsection: greedy as a heuristic (G1, R7 #4); FP-mixed formula (G3, R7 #5).
+
+**`results.tex`:** dropped the duplicate strategy list and fixed a reference to the removed
+`eq:stage_cost`. All `\ref`/`\eqref` targets resolve (scripted check). **Not compiled.**
+
+**Remaining TODOs:** a forward reference to the lifting-bound section (step 3).
+
+---
+
+## 2026-10-18 — paper step 1: stale CDC content removed from the `.tex`
+
+**Removed:** the abstract's "factor of 2.7 / 3.22" claim; Tables I–III and the boxplot, heatmap
+and ΔV figures (with their prose and all commented-out old-number blocks) from
+`results.tex`; the discussion's claims that FP "consistently outperforms" baselines and wins
+on fuel, and that random beats greedy "at every horizon"; and the related-work claim that FP
+"ensures convergence". FP converges only for a fixed matrix, per C3.
+
+**Corrected from the code (`IC.jl`), in the setup paragraph:** dispersed ICs; ΔV cap 2 km/s,
+never binding (the paper said 0.1); λ₂ = 0; Ipopt + saddle-point certificate instead of
+OSQP; no probability floor; 100 trials with common random numbers instead of 50 identical
+orbits; S = 30 only. Added the Ipopt citation (Wächter & Biegler 2006) to `refs.bib`.
+
+**Left for step 2:** everything in the methods section, including the LP, Eq. 7, notation,
+the FP-mixed definition and the frame description. The old `images/*.png` result files are
+now unreferenced but left on disk. **Not compiled:** LaTeX is not installed here.
+
+---
+
+## 2026-10-18 — CDC reviews restored after the CDC folder was deleted
+
+The author deleted `Game_Theory_Space_CDC_2026/` and `docs/README_plan.md` while cleaning up,
+then asked to keep the reviews. The four review files were restored from commit 66eadae into
+`Game_Theory_Space_ECC_2027/reviews/`. Everything else, including the CDC submission PDF and
+the archived plan, stays deleted and can be recovered from git history. References in
+`CLAUDE.md`, `README.md` and the archived narrative now point to the new location.
+
+---
+
+## 2026-10-18 — docs cut to essentials; the paper is now edited in-repo
+
+**Decided (author):** (1) Edit the `.tex` in `Game_Theory_Space_ECC_2027/` directly. This
+reverses the "deliver markdown, no LaTeX in this repo" rule. (2) `CLAUDE.md` and `README.md`
+were too long and confusing; cut them to essentials.
+
+**Done:** `CLAUDE.md` went from 230 to ~150 lines. "Current state" has no result numbers, and a
+new "The paper" section gives the editing rules. `README.md` went from 659 to ~110 lines:
+thesis, a one-line-per-result table pointing to LOG dates, gate status, and the paper to-do.
+The full previous README is archived verbatim as `docs/README_narrative_2026-10-18.md`. It is
+the drafting source for the `.tex`. The review map (its §4.8) and page budget (§4.7) live there.
+
+**Found while surveying the `.tex`:** it is still the CDC text. Every number is void. No
+plotting scripts exist for Gate B/C figures. LaTeX is not installed on this machine, so page
+count is unverified. Three bib entries are incomplete. The affiliation footnote has an
+unassigned ².
+
+---
+
+## 2026-10-17 — CDC review response map (W5); README had `greedy` wrong
+
+**What:** mapped every comment from R5, R7, R8 and the AE to its answer. Map in README §4.8.
+No runs.
+
+**Correction — README §3.5 misdescribed `greedy`.** It said "argmax/argmin of expected payoff
+against the opponent's Nash mixture". The code (`choose_strategies!`, `argmax(mixing_weights[i])`)
+picks the **largest weight in the player's own Nash mixture**, which is exactly the rule R7 #4
+criticized. Every `greedy` number is correct for the rule as coded; only the description was
+wrong. **Decided:** keep the rule and call it a heuristic baseline. Changing it would re-open
+Gate B nine days before ECC.
+
+**Three gaps remain open (README §4.8):**
+- **G1** `greedy` rationale — relabelled, as above.
+- **G2** The lifting bound's scope. It compares the lifted game with a stage game whose targets
+  lie anywhere on the circumcircle. It does not reach the original continuous-control game,
+  which has a reachable set rather than a circle and a 30-step closed loop. This is the main
+  theory exposure for ECC, and contribution #1 rests on it.
+- **G3** `FP_mixed` — the formula (`∝ c − min c + 1e-6`) is now written in §3.5. Its heuristic
+  status must be stated.
+
+**Also noted:** the AE asks for tractability *guarantees*. We have only measurements (a
+nonconvex local solve). Say so rather than imply more.
+
+---
+
+## 2026-10-17 — C3.1 tail recorded: FP converges on every sampled frozen matrix
+
+**Why:** the 2026-09-17 C3 entry logged only the *median* frozen-matrix NashConv. A reviewer
+will ask whether FP converges on every matrix, and the p90/max were printed but never recorded.
+
+**Run:** Gate B data is not on this (8-core) machine. Its `test/results/n30/` held only the
+pre-fix CDC-era `games_50.jld2`. So the two cells `analyze_c3.jl` reads were **regenerated
+locally** with Gate B's exact settings (CRN `MersenneTwister(1)` per cell, `disperse`, slim,
+100 × 30): `mixed`/`mixed` 222 s, `FP_greedy`/`FP_greedy` 240 s on 8 threads. Driver kept
+outside the repo (a 10-line call to `run_MC_games_parallel`, identical to `run_gate_b.jl`'s).
+New files are `games_100.jld2` beside the untouched `games_50.jld2`. `analyze_c3.jl` now also
+prints the p90 and max rates.
+
+**C3.1 result, 200 real matrices, NashConv by FP iteration count:**
+
+| | 10 | 100 | 1,000 | 10,000 | rate |
+|---|---|---|---|---|---|
+| median | 1.643e-1 | 4.262e-2 | 1.169e-2 | 3.703e-3 | T^-0.55 |
+| p90 | 1.878e-1 | 6.792e-2 | 2.309e-2 | 8.168e-3 | T^-0.45 |
+| max | 2.223e-1 | 1.020e-1 | 3.402e-2 | 1.158e-2 | T^-0.43 |
+
+**FP converges on every sampled matrix.** The tail is monotone at every checkpoint, slower
+than the median (T^-0.43 vs T^-0.55), and the worst matrix ends at 1.2e-2 km. The claim
+holds without qualification on the sample. Caveat: 200 of 3,000 matrices are sampled, not all.
+
+**Unplanned finding: regeneration on a different machine is close but NOT bitwise.** Against
+the 2026-09-17 numbers from the 32-core machine:
+
+| quantity | 09-17 (32-core) | 10-17 (8-core) |
+|---|---|---|
+| frozen median @ 10,000 | 3.37e-3 | 3.70e-3 |
+| median rate | T^-0.56 | T^-0.55 |
+| ‖ΔA‖/‖A‖ median | 18.5% | 18.44% |
+| ‖Δp*‖₁ median | 1.359 | 1.362 |
+| \|ΔV\| median | 0.131 | 0.1306 |
+| FP/FP NashConv, steps 1–5 / 26–30 | 2.63e-1 / 2.24e-1 | 2.66e-1 / 2.15e-1 |
+
+The C3.2 statistics move in the 3rd–4th significant figure, so the **payoff matrices
+themselves differ**; this is not just FP's argmax being sensitive to ties. The likeliest
+source is floating-point differences across CPU, BLAS or library builds; this is not
+isolated. **Every conclusion is unchanged.** But "deterministic under CRN" has only been
+verified *on one machine* (B6's bitwise check); it does not hold across machines.
+Value-preservation checks must compare files produced on the same machine.
+
+**For the paper:** quote one run consistently. Recommend the 32-core numbers for everything
+already in README §5 and this entry's table for the tail, with the source noted.
+
+---
+
+## 2026-10-16 (later) — ECC 2027 CFP read; docs re-pointed at a controls audience
+
+**Correction to the entry below:** the format is now known, from the
+[ECC 2027 CFP](https://ecc27.euca-ecc.org/call-for-papers/). Papers are due **Oct 31 2026**
+via PaperCept. Review manuscript ≤ 8 pp two-column; **final ≤ 6 pp**, +2 at paid over-length
+charges. ieeeconf.cls, US Letter, PDF ≤ 3 MB. Notification Mar 5, final Apr 5 2027;
+conference in Brussels, 13–16 July 2027. The CFP is **still silent on blind review**.
+
+**Decided (author asked for a controls-oriented emphasis):**
+- Write to **6 pages**, not 8, so nothing has to be cut or paid for after acceptance.
+- Contributions are reordered: (1) the lifting bound and its convergence curve, (2) solver
+  reliability and timing, (3) the safety/adaptation tradeoff with capture rates. EGTA, C1,
+  C2 and `Meta_*` are demoted to one sentence each.
+- Gate D becomes **W1–W6** (README §4.7). The W prefix avoids colliding with defect IDs.
+- No new experiments are planned. The constraint is page budget, not compute.
+
+**Derived, not newly measured:** compute per game step ≈ 1.5 s single-threaded (from the
+~46 s per 30-step game), against ~585 s of trajectory executed per step (5 segments × ~117 s),
+roughly 400× margin. This is quoted in README §1 as a real-time-feasibility point. Re-measure
+it before it goes in a table.
+
+`docs/README_plan.md` is left untouched; it is archived.
+
+---
+
+## 2026-10-16 — venue change: AAMAS 2027 → ECC 2027 (paper due Oct 31)
+
+**Decision (author):** retarget from AAMAS 2027 (abstract Oct 1 / paper Oct 8, both passed) to
+**ECC 2027, paper due Oct 31 2026**. No new runs. Gates A–C stand unchanged; numbers are
+venue-independent. Gate D (writing support) is now the current work, for a controls audience.
+
+**Unconfirmed:** ECC 2027 page limit and whether review is double-blind — no 2027 CFP found
+on 2026-10-16 (ECC 2026 used PaperCept). Check before sizing figures/tables.
+
+**Framing implication to weigh, not yet decided:** the AAMAS-specific emphasis (EGTA, no-regret
+baseline, opponent-modeling literature) matters less; C4/C5 (lifting bound), receding-horizon
+solver characterization, and capture definitions matter more — and ECC reviewers overlap the
+CDC community whose reviews are in `Game_Theory_Space_CDC_2026/reviews/`.
+
+---
+
 ## 2026-09-17 — C1 (asymmetric): the discounting gain is mostly the PURSUER hurting itself
 
 **Run:** `test/run_c1_asym.jl` — per-player γ, both one-sided directions, 3 γ × 2 directions ×

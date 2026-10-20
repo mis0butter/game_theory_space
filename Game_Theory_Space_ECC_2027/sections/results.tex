@@ -1,0 +1,31 @@
+
+% 2026-10-18: every result from the CDC submission was removed (tables, figures, and the
+% prose built on them). Those numbers came from runs with the LP sign error (defect D1),
+% OSQP, identical initial orbits, and lambda_2 = 0.1. The red TODOs mark where the
+% re-measured results go; all numbers come from LOG.md with their intervals.
+
+We evaluate the approach on a two-spacecraft pursuit-evasion scenario in low Earth orbit.
+\red{[TODO: one-sentence roadmap of the results subsections.]}
+
+\subsection{Simulation Set-Up}
+
+We consider a pursuit-evasion scenario in low Earth orbit. The reference trajectory is a near-circular orbit at an altitude of 620 km (semi-major axis $a = 6998$ km, eccentricity $e = 0.01$, inclination $i = 20^\circ$), yielding an orbital period of approximately 97 minutes. The evader (Player 1) starts near this reference orbit, while the pursuer (Player 2) starts on a slightly higher orbit, introducing a natural along-track drift between the two vehicles. Initial conditions are randomized per trial: the pursuer's semi-major-axis ratio $a_P/a$ is drawn uniformly from $[1.0045, 1.0055]$, and both spacecraft receive true-anomaly and right-ascension perturbations of about 5 km each. Both spacecraft are modeled as point masses executing impulsive $\Delta V$ maneuvers; no continuous-thrust or attitude dynamics are included. The per-segment cap $\Delta V_{\max} = 2$ km/s never binds in this scenario.
+
+At each game step, both players simultaneously select one of six target vertices arranged as a regular hexagon of radius $R = 6.378$ km in the local orbital frame.
+We compute the $\Delta V$ impulses to generate the candidate trajectories from the current state to each vertex via \eqref{eq:mpc}.
+The game is discretized into $K = 50$ segments per orbit, and each player optimizes over an $L=10$-segment horizon. The resulting $6 \times 6$ payoff matrix is computed via \eqref{eq:ave_stage_cost} with $\epsilon = 0.1$ km; the payoff depends on separation only, and $\Delta V$ is reported as a separate metric.
+The matrix-game LPs \eqref{eq:game_LP}--\eqref{eq:game_LP_P} are solved each step with Ipopt \cite{wachter2006implementation} at tolerance $10^{-14}$, and every solution is checked against \eqref{eq:certificate}. Each game step executes $N=5$ segments, and then the horizon shifts to generate the next set of candidate trajectories.
+
+We evaluate all 25 pairwise matchups of the five strategies of Section~\ref{sec:strategies} over $S = 30$ game steps (three orbital periods). Each matchup is run for 100 Monte Carlo trials. Trial $k$ uses the same randomized initial conditions in every matchup (common random numbers), so differences between matchups are compared trial by trial. All reported intervals are 95\% confidence intervals.
+
+\subsection{Results}
+
+\red{[TODO: solver and LP reliability — convergence rate, time per solve, terminal miss vs.\ $R$, certificate failures.]}
+
+\red{[TODO: the $5 \times 5$ tournament and the sign reversal — table of FP-greedy $-$ mixed by opponent, with intervals. No ``dominant'' language: nothing is dominant.]}
+
+\red{[TODO: capture — hard 0.2 km and soft 1.0 km definitions and rates.]}
+
+\red{[TODO: price of safety — oracle vs.\ FP vs.\ Nash pursuer against fixed-vertex evaders, and the reversal against a mixed evader.]}
+
+\red{[TODO: $\Delta V$ — reported separately from the payoff, re-measured.]}

@@ -1,0 +1,273 @@
+
+
+\begin{frame}{Our Approach}
+
+    % 2-agent pursuit-evasion game ... Lambert transfer analysis ... low-thrust analysis ... 
+    Given a 2-agent, pursuit-evasion game between satellites, the combined trajectory optimization and game theory problem can be approached with several methods: 
+    \begin{itemize}
+        \item Intercept, where we only consider the final positions of the satellites 
+        \item Rendezvous, where additionally care about the final velocities of the satellites\footnote{For more details on the rendezvous problem, see Paper Appendix.}
+    \end{itemize}
+
+\end{frame} 
+
+\begin{frame}{Intercept Geometry}
+    For intercept problems, why do we only care about the initial maneuver at $t_1$?
+
+    \begin{columns}
+    \begin{column}{0.5\linewidth}
+    Lambert's problem provides a solution with two maneuvers: 
+    \begin{itemize}
+        \item $\boldsymbol{v}_1$ : velocity that Pursuer needs to perform at $t_1$ to arrive at Evader location at $t_2$
+        \item $\boldsymbol{v}_2$ : velocity that corrects Pursuer transfer orbit to match Evader velocity at $t_2$
+    \end{itemize}
+    \end{column}
+
+    \begin{column}{0.5\linewidth}
+    \begin{figure}
+        \centering
+        \includegraphics[width = \textwidth]{pres_images/traj.png}
+        \caption{Pursuer and Evader orbits with Lambert solution}
+        \label{fig:traj}
+    \end{figure}
+
+    \end{column}
+    \end{columns}
+    
+    
+\end{frame}
+
+\begin{frame}{Known Simulation Parameters}
+    Assume that the following values are given for the pursuer $P$ and the evader $E$: 
+
+    \begin{itemize}
+        \item $\boldsymbol{x}^P_0 = [\boldsymbol{r}^P_0, \boldsymbol{v}^P_0]^T$ 
+        \item $\boldsymbol{x}^E_0 = [\boldsymbol{r}^E_0, \boldsymbol{v}^E_0]^T$
+        \item Dynamics for each player are defined by the Cartesian two-body satellite-Earth system: $\dot{\boldsymbol{x}} = [\boldsymbol{v}, -\frac{\mu \boldsymbol{r}}{|\boldsymbol{r}|^3}]^T$
+        \item Earth's gravitational parameter $\mu$
+    \end{itemize}
+
+    Time variables: 
+    \begin{itemize}
+        \item $t_0$: initial simulation time
+        \item $t_1$: time at first maneuver
+        \item $t_2$: time at second maneuver
+        \item Note that $t_0 \neq t_1$, as the initial states of the satellites might not provide the best geometry to perform the maneuver
+    \end{itemize}
+    
+\end{frame}
+
+
+
+\begin{frame}{Intercept Problem - Passive Evader}
+    We model the problem for the Pursuer as:
+    % \begin{align}
+    %     \min_{\Delta \boldsymbol{v}_1, t_1, t_2} \;      & |\boldsymbol{r}^P_2 - \boldsymbol{r}^E_2| \\ 
+    %     \text{ subject to }             & 
+    %                                     & \Delta \boldsymbol{v}_1 = |\boldsymbol{v}^P_1 - \boldsymbol{v}_1| \\
+                                        
+    % \end{align} 
+    % where (P, E) are the pursuer and evader, respectively. 
+    % 
+    \begin{align}
+        \min_{\Delta \boldsymbol{v}_1, t_1, t_2} \;      & |\Delta \boldsymbol{v}_1| \\ 
+        \text{ subject to: }             & \boldsymbol{r}^P_2 - \boldsymbol{r}^E_2 = 0 \\
+                                        & \dot{\boldsymbol{x}}^P = [\boldsymbol{v}^P, -\frac{\mu \boldsymbol{r}^P}{|\boldsymbol{r}^P|^3}]^T\\
+                                        & \dot{\boldsymbol{x}}^E = [\boldsymbol{v}^E, -\frac{\mu \boldsymbol{r}^E}{|\boldsymbol{r}^E|^3}]^T\\
+                                        & \Delta \boldsymbol{v}_1 = |\boldsymbol{v}^P_1 - \boldsymbol{v}_1| \\
+                                        & \boldsymbol{v}_1, \boldsymbol{v}_2 = Lambert(\boldsymbol{r}^P_0, \boldsymbol{r}^E_0, t_2, t_1, \mu)
+    \end{align} 
+
+    $\boldsymbol{r}^E_t$ can be computed by the Pursuer for all times $t$, since the Evader does not perform any maneuvers. This gives us a baseline for what the Pursuer trajectories can look like given the dynamics constraints.
+    
+\end{frame}
+
+\begin{frame}{Directions to Lambert Solutions}
+    Verifying the orbit geometry is necessary in finding solutions using Lambert targeting.
+
+    \begin{columns}
+    \begin{column}{0.5\linewidth}
+    \begin{figure}
+        \centering
+        \includegraphics[width = \textwidth]{pres_images/traj.png}
+        \caption{Prograde Lambert Solution}
+    \end{figure}
+    \end{column}
+
+    \begin{column}{0.5\linewidth}
+    \begin{figure}
+        \centering
+        \includegraphics[width = \textwidth]{pres_images/traj_retro.png}
+        \caption{Retrograde Lambert Solution}
+    \end{figure}
+    \end{column}
+    \end{columns}
+
+    While the retrograde solution numerically exists, \red{the trajectory \\ goes through Earth!}
+
+\end{frame}
+
+\begin{frame}{Solution Discontinuities - Passive Evader}
+    Lambert targeting allows us to compute for numerically feasible $\Delta \boldsymbol{v}$ solutions, but to obtain the minimum, we require iterating through $(t_1, t_2)$ values.
+
+    \begin{columns}
+    
+        \begin{column}{0.5\linewidth}
+        \begin{figure}
+            \centering
+            \includegraphics[width = 0.9\textwidth]{pres_images/lambert_pro_dvTotalcontour.png}
+            \caption{Prograde-Intercept $|\Delta \boldsymbol{v}^P_1|$}
+        \end{figure}
+        \end{column}
+    
+        \begin{column}{0.5\linewidth}
+        \begin{figure}
+            \centering
+            \includegraphics[width = 0.8\textwidth]{pres_images/lambert_varyTF_intercept.png}
+            \caption{Prograde-Intercept solutions for fixed $t_1$, varying $t_2$}
+        \end{figure}
+        \end{column}
+    
+    \end{columns}
+
+    These results led us to constrain the problem to smaller initial orbit differences and a shorter propagation time.
+\end{frame}
+
+\begin{frame}{Intercept Problem - Active Evader}
+    We reformulate the problem to implicitly find the minimum Lambert solution to focus on minimizing the distance between the satellites when the Evader is allowed to maneuver. 
+
+    The Pursuer's optimization problem now becomes: 
+    \begin{align}
+        \min_{\Delta \boldsymbol{v}_1, t_1, t_2} \;      & |\boldsymbol{r}^P_2 - \boldsymbol{r}^E_2| \label{eq:min_active_evader_prob} \\ 
+        \text{ subject to }             & \dot{\boldsymbol{x}^P} = [\boldsymbol{v}^P, -\frac{\mu \boldsymbol{r}^P}{|\boldsymbol{r}^P|^3}]^T\\
+                                        & \dot{\boldsymbol{x}^E} = [\boldsymbol{v}^E, -\frac{\mu \boldsymbol{r}^E}{|\boldsymbol{r}^E|^3}]^T\\
+                                        & \Delta \boldsymbol{v}_1 = |\boldsymbol{v}^P_1 - \boldsymbol{v}_1| \\
+                                        & \boldsymbol{v}_1, \boldsymbol{v}_2 = minLambert(\boldsymbol{r}^P_0, \boldsymbol{r}^E_0, t_2, t_1, \mu) \label{eq:min_lambert}
+    \end{align} 
+    
+    % \begin{align}
+    %     \min_{\Delta \boldsymbol{v}_1, t_1, t_2} \;      & |\Delta \boldsymbol{v}_1| \\ 
+    %     \text{ subject to: }             & \boldsymbol{r}^P_2 - \boldsymbol{r}^E_2 = 0 \\
+    %                                     & \dot{\boldsymbol{x}}^P = [\boldsymbol{v}^P, -\frac{\mu \boldsymbol{r}^P}{|\boldsymbol{r}^P|^3}]^T\\
+    %                                     & \dot{\boldsymbol{x}}^E = [\boldsymbol{v}^E, -\frac{\mu \boldsymbol{r}^E}{|\boldsymbol{r}^E|^3}]^T\\
+    %                                     & \Delta \boldsymbol{v}_1 = |\boldsymbol{v}^P_1 - \boldsymbol{v}_1| \\
+    %                                     & \boldsymbol{v}_1, \boldsymbol{v}_2 = Lambert(\boldsymbol{r}^P_0, \boldsymbol{r}^E_0, t_2, t_1, \mu)
+    % \end{align} 
+
+\end{frame}
+
+% \begin{frame}{Rendezvous Problem} -- PUT IN APPENDIX
+%     We model the problem as:
+%     \begin{align}
+%         \min_{\Delta \boldsymbol{v}_1, \red{\Delta \boldsymbol{v}_2}, t_1, t_2} \;      & |\boldsymbol{r}^P_2 - \boldsymbol{r}^E_2| \\ 
+%         \text{ subject to }             & \dot{\boldsymbol{x}^P} = [\boldsymbol{v}^P, -\frac{\mu \boldsymbol{r}^P}{|\boldsymbol{r}^P|^3}]^T\\
+%                                         & \dot{\boldsymbol{x}^E} = [\boldsymbol{v}^E, -\frac{\mu \boldsymbol{r}^E}{|\boldsymbol{r}^E|^3}]^T\\
+%                                         & \Delta \boldsymbol{v}_1 = |\boldsymbol{v}^P_1 - \boldsymbol{v}_1| \\
+%                                         & \red{\Delta \boldsymbol{v}_2 = |\boldsymbol{v}^E_2 - \boldsymbol{v}_2|} \\
+%                                         & \boldsymbol{v}_1, \boldsymbol{v}_2 = minLambert(\boldsymbol{r}^P_0, \boldsymbol{r}^E_0, t_2, t_1, \mu)
+%     \end{align} 
+%     where (P, E) are the pursuer and evader, respectively. 
+    
+%     % Model the problem as:
+%     % \begin{align}
+%     %     \min_{\Delta \boldsymbol{v}_1, \red{\Delta \boldsymbol{v}_2}, t_1, t_2} \;      & |\Delta \boldsymbol{v}_1| + \red{|\Delta \boldsymbol{v}_f|}\\ 
+%     %     \text{ subject to }             & r^P_2 - r^E_2 = 0.   
+%     % \end{align} 
+
+%     % where (P, E) are the pursuer and evader, respectively.
+
+% \end{frame}
+
+
+
+\begin{frame}{Short Range Interception} 
+
+    For the short range intercept problem, we assume that we are in an active pursuit game.  
+    % and no longer wish to minimize $ \Delta v $ (although it is still subject to constraints). 
+% 
+    % A reachable set here is described as the set of all possible orbits a given spacecraft can reach given its initial orbit A0 and maximum available $ \Delta V_{max} $. 
+% 
+    % We define a radius around the evader as the sphere of active pursuit, which we set to be 10 km. 
+% 
+    The actions for the pursuer are largely unchanged from the longe-range problem, except that we are no longer minimizing $ \Delta v_1 $ (although still subject to constraints), and $ t_1 $ is now fixed at the start.  
+
+    On the other hand, the evader is now actively avoiding interception, and wants to maximize the $ \Delta v $ that the pursuer expends. 
+    Inclination changes are the most expensive orbital maneuver satellites can perform, and $ \Delta v $ constraints can be directly translated into $ \Delta i $ constraints. 
+    The formula for $ \Delta v $ as a function of desired $ \Delta i $ is  
+% 
+    \begin{align}
+        \Delta i_{mag} & = \sqrt{ v_1^2 + v_2^2 - 2 v_1 v_2 cos( \Delta i ) } \\ 
+        \Delta v & = \Delta i_{mag} ( \bar{v}_2 - \bar{v}_1 ) 
+    \end{align}
+
+    % v1 = x1[4:6]
+    % kep2 = cart2kep(x1, mu)
+    % kep2[3] += Δi
+    % v2 = kep2cart(kep2, mu)[4:6]
+    % Δi_mag = sqrt(norm(v1)^2 + norm(v2)^2 - 2*norm(v1)*norm(v2)*cos(Δi))
+    
+\end{frame} 
+
+\begin{frame}{Short Range Interception} 
+
+    We set up the simulation as follows: 
+
+    \begin{algorithm}[H]
+    \begin{algorithmic}[1]
+        \STATE Given initial pursuer state $ \bar{x}_1^P $ and chaser state $ \bar{x}_1^E $ 
+        \STATE Pursuer actions: 
+        \begin{itemize}
+            \item Compute and apply $ \Delta v_1^P $ following Equations \ref{eq:min_active_evader_prob} through \ref{eq:min_lambert} for TOF = 100 s 
+            \item Propagate state for 10 s 
+        \end{itemize} 
+        \STATE Evader actions: 
+        \begin{itemize}
+            \item Compute and apply $ \Delta v_1^E $ maneuver to maximize inclination change for pursuer 
+            \item Propagate state for 10 s 
+        \end{itemize} 
+        \STATE Repeat steps 2 through 4, setting $ \bar{x}_1^P $ and $ \bar{x}_1^E $ to the final states of the 10 s moving horizon 
+        \end{algorithmic}
+    \caption{Pursuit Evasion Game}
+    \label{alg:seq}
+    \end{algorithm}
+% 
+    % We solve a finite, moving horizon 
+    
+\end{frame}
+
+\begin{frame}{Pursuit-Evasion Game Animation}
+
+    \centering
+    \includemedia[
+      activate=pageopen,
+      width=240pt,height=150pt,
+      addresource=pres_images/pursuit_game.mp4,
+      flashvars={%
+    src=pres_images/pursuit_game.mp4      % same path as in addresource!
+    %scaleMode=stretch % removes black bars
+    &autoPlay=true      % optional configuration
+    &loop=true          % variables
+    } 
+    ]{}{StrobeMediaPlayback.swf}
+
+    % \begin{figure}
+    %     \centering
+    %     \includegraphics{pres_images/pursuit_evasion_game.png}
+    %     \caption{Pursuit Evasion Game}
+    %     \label{fig:pursuit_evasion}
+    % \end{figure}
+    
+\end{frame}
+
+
+% \begin{frame}{Long-Range Simulations}
+
+%     Lambert targeting allows us to compute for feasible $\Delta \boldsymbol{v}$ solutions, but to obtain the minimum, we require iterating through $(t_1, t_2)$ values.
+
+%     Plots below show the Pursuer's cost when Evader has:
+%     \begin{itemize}
+%         \item No control authority, i.e. the Evader stays in the original orbit
+%         \item Maneuvers for a limited inclination change (geometric maximum $\Delta \boldsymbol{v}$ due to orbital energy difference
+%     \end{itemize}
+
+% \end{frame}

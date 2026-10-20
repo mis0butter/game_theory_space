@@ -1,0 +1,65 @@
+% 2026-10-18 (step 2): stated the dynamics' assumptions (R7 #1), separated physical distance
+% from the stage payoff (R7 m1), fixed the sign convention (R7 #2), and removed the
+% orbital-bandwidth / feasible-set constraints, which are not enforced by the method.
+
+Consider a pursuer $P$ and an evader $E$ in low Earth orbit. The state of each agent $i \in \{P, E\}$ is $\mathbf{x}_i(t) = [\mathbf{r}_i^\top(t), \mathbf{v}_i^\top(t)]^\top \in \mathbb{R}^6$, where $\mathbf{r}_i$ and $\mathbf{v}_i$ are Cartesian position and velocity in the Earth-Centered Inertial (ECI) frame. Time is divided into segments of equal duration $\Delta t$, and the state evolves as
+%
+\begin{equation}
+\mathbf{x}_i(t_{k+1}) = F\big(\mathbf{x}_i(t_k) + [\mathbf{0}^\top, \mathbf{u}_i^\top(t_k)]^\top\big),
+\label{eq:state_eom}
+\end{equation}
+%
+where $\mathbf{u}_i(t_k) = \Delta \mathbf{v}_i(t_k) \in \mathbb{R}^3$ is an impulsive velocity change applied at the start of segment $k$, and $F: \mathbb{R}^6 \to \mathbb{R}^6$ is the two-body Keplerian flow over $\Delta t$ (solved through Kepler's equation). $F$ is nonlinear but smooth away from singular orbits, so trajectories are differentiable in the controls. Impulses applied between Keplerian arcs are the same transcription used by Sims and Flanagan for preliminary trajectory design \cite{sims1997preliminary}. Each impulse is bounded, $\|\mathbf{u}_i(t_k)\|_2 \leq \Delta V_{\max}$.
+
+% ----------------
+
+\subsection{Objective}
+
+The agents have strictly competing objectives, forming a zero-sum game. The evader stays near a reference orbit while maximizing its distance from the pursuer; the pursuer minimizes that distance to achieve interception. Let
+%
+\begin{equation}
+d_k = \|\mathbf{r}_P(t_k) - \mathbf{r}_E(t_k)\|_2
+\label{eq:distance}
+\end{equation}
+%
+denote the physical separation at time $t_k$. The stage payoff is
+%
+\begin{equation}
+\ell_k = \sqrt{d_k + \epsilon},
+\label{eq:stage_payoff}
+\end{equation}
+%
+an increasing, concave function of separation, with smoothing constant $\epsilon = 0.1$ km. Concavity weights changes in separation more heavily when the spacecraft are close. Over an $L$-segment horizon, the payoff is the average
+%
+\begin{equation}
+J(\mathbf{U}_E, \mathbf{U}_P) = \frac{1}{L}\sum_{k=0}^{L-1} \ell_k ,
+\label{eq:objective}
+\end{equation}
+%
+where $\mathbf{U}_i = \{\mathbf{u}_i(t_0), \dots, \mathbf{u}_i(t_{L-1})\}$ is player $i$'s control sequence. The payoff depends on separation only: fuel is minimized when each candidate trajectory is generated (Section~\ref{sec:methods}) and is reported separately rather than traded against separation.
+
+% ----------------
+
+\subsection{Receding-Horizon Game}
+
+At each decision epoch, the agents face the finite-horizon game
+%
+\begin{equation}
+    \begin{aligned}
+    \max_{\mathbf{U}_E} \min_{\mathbf{U}_P} \quad & J(\mathbf{U}_E, \mathbf{U}_P) \\
+    \text{subject to} \quad & \eqref{eq:state_eom}, \quad \|\mathbf{u}_i(t_k)\|_2 \leq \Delta V_{\max}, \quad i \in \{E, P\},
+    \label{eq:minimax}
+    \end{aligned}
+\end{equation}
+%
+so the evader maximizes $J$ and the pursuer minimizes it. A saddle point $(\mathbf{U}_E^*, \mathbf{U}_P^*)$ is a Nash equilibrium of this zero-sum game:
+%
+\begin{equation}
+J(\mathbf{U}_E, \mathbf{U}_P^*) \leq J(\mathbf{U}_E^*, \mathbf{U}_P^*) \leq J(\mathbf{U}_E^*, \mathbf{U}_P) .
+\end{equation}
+%
+Each agent executes the first part of its solution, then the horizon shifts forward and the game is solved again.
+
+% ----------------
+
+However, a pure-strategy saddle point of \eqref{eq:minimax} over continuous control sequences may not exist, and is computationally prohibitive to find in real time with nonlinear orbital dynamics \cite{jia_approximate_2025}. Furthermore, deterministic strategies derived from the HJBI equations are susceptible to exploitation if one agent deviates from ``rational'' play \cite{krusniak_mixed_2025}.

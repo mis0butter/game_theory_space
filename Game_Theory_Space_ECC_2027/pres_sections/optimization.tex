@@ -1,0 +1,263 @@
+
+% \begin{frame}{Optimization} 
+
+%     Long spacecraft trajectories ... N segments ... 
+    
+% \end{frame}
+
+% \begin{frame}{Optimization} 
+
+%     Define optimization problem ... equality constraints ... inequality constraints ... 
+    
+% \end{frame} 
+
+\begin{frame}{Optimization} 
+
+    Let's say we wish to minimize an objective function $ 
+f( x ) $ subject to equality constraints $ c( x ) $ and inequality constraints $ h( x ) $
+% 
+    \begin{align}
+        \min_{ x } \;      & f( x ) \\ 
+        \text{ subject to }             & c( x ) = 0 \\  
+                                        & h( x ) \leq 0 .   
+    \end{align} 
+
+    I'm sure many people are familiar with unconstrained optimization, so 
+    % Before we deal with the constraints, 
+    let's go over constrained optimization algorithms. 
+    
+\end{frame} 
+
+% \begin{frame}{Optimization} 
+
+%     Newton's method is a powerful technique with quadratic convergence properties, but it requires the 2nd order derivative (or Hessian) of the objective function. 
+
+%     2nd order derivatives are not always available. 
+%     Alternatively, Quasi-Newton methods require only the gradient of the objective function and also attain superlinear convergence rates. 
+
+% \end{frame} 
+
+% \begin{frame}{Optimization}
+    
+%     To illustrate, we form a quadratic model of the objective function 
+%     % 
+%     \begin{equation}
+%         m_k(p) = f_k + \nabla f_k^T p + \frac{1}{2} p^T B_k p, 
+%     \end{equation} 
+
+%     where $ x_k $ is the current iterate and $ B_k $ is a symmetric positive definite matrix that will be updated at every iteration. 
+%     The minimizer $ p_k $ of the convex quadratic model is 
+% % 
+%     \begin{equation}
+%         p_k = - B_k^{-1} \nabla f_k, 
+%     \end{equation} 
+
+%     which we use as a new search direction to find the new iterate 
+% % 
+%     \begin{equation}
+%         x_{k+1} = x_k + \alpha_k p_k. 
+%     \end{equation}
+
+%     % Unconstrained optimization ... BFGS ... 
+    
+% \end{frame} 
+
+% \begin{frame}{Optimization}
+% % 
+% %     The approximate Hessian $ B_{k+1} $ must satisfy   
+% % % 
+% %     \begin{align}
+% %         B_{k+1} ( x_{k+1} - x_k ) & = \nabla f_{k+1} - \nabla f_k  \\ 
+% %         B_{k+1} \Delta x          & = \Delta g  \\ 
+% %         \Delta x                  & = B_{k+1}^{-1} \Delta g . 
+% %     \end{align}
+
+
+%     The step length $ \alpha_k $ is chosen to ensure that the new iterate represents a decrease in the objective function. 
+
+%     We shall henceforth denote $ B_k^{-1} $ by $ H_k $. 
+%     Various methods exist for updating the approximate Hessian and its inverse; the BFGS update is presently considered to be the most effective 
+% % 
+%     \begin{equation}
+%         H_{k+1} = ( I - \rho_k s_k y_k^T ) H_k ( I - \rho_k y_k s_k^T ) + \rho_k s_k s_k^T, 
+%     \end{equation} 
+
+%     where $ s_k = x_{k+1} - x_k $, $ y_k = \nabla f_{k+1} - \nabla f_k $, and $ \rho_k = \frac{1}{y_k^T s_k} $. 
+%     We generate iterates of $x_k$ until the norm of $ \nabla f_k $ reaches below a certain tolerance. 
+    
+% \end{frame}
+
+\begin{frame}{Optimization} 
+
+    When equality constraints are present, we can augment the objective function with Lagrange multiplier $ \lambda $ and penalty parameter $\rho$
+% 
+    \begin{equation}
+        L(x, \lambda) = f(x) + \lambda c(x) + \frac{\rho}{2} c(x)^2, 
+    \end{equation} 
+
+    where $L$ is called the augmented Lagrangian. 
+% The necessary condition to find the minimum is that the gradient of $L_0$ with respect to its inputs equals 0. 
+% % 
+%     \begin{align}
+%         \nabla_x L_0( x_*, \lambda_* )          & = 0 = \nabla_x f(x_*) + \lambda_* \nabla_x c(x_*) \\ 
+%         \nabla_\lambda L_0( x_*, \lambda_* )    & = 0 = c(x_*) 
+%     \end{align}
+
+    % We can generate iterates of $ x_k $ and $ \lambda_k $ until the minimum is found. 
+% 
+    One algorithm for updating $x_k$ and $\lambda_k$ until convergence, or the minimum is found, is called dual ascent 
+% 
+    \begin{align}
+        x_{k+1}         & = \min_x L(x, \lambda_k) \\ 
+        \lambda_{k+1}   & = \lambda_k + \rho_k c(x_{k+1}) . \label{eq:eq_update} \\ 
+        \rho_{k+1}      & = \rho_k \gamma 
+    \end{align}
+
+    % The penalty parameter is increased at each iterate. 
+
+    % Constrained optimization ... equality constraints ... Lagrangian ... 
+    
+\end{frame} 
+
+\begin{frame}{Optimization} 
+
+    When inequality constraints are present, we can convert them into equality constraints by introducing slack variable $\alpha$
+% 
+    \begin{equation}
+        \Psi (x, \alpha) = h(x) + \alpha^2 = 0, 
+    \end{equation} 
+
+    which can be treated as a new state (but we don't want to). The augmented Lagrangian becomes 
+% 
+    \begin{equation}
+        L(x, \lambda, \alpha) = f(x) + \lambda \Psi (x, \alpha) + \frac{\rho}{2} \Psi(x, \alpha)^2. 
+    \end{equation} 
+
+    Before we solve the inequality-constrained optimization problem, we need to first go over the optimality conditions for a solution. 
+
+    % and can also be minimized using dual ascent to solve for $ x$, $\lambda$, and $\alpha$. 
+
+    % and it has the same necessary condition for finding the minimum 
+    % % 
+    % \begin{align}
+    %     \nabla_x J( x_*, \lambda_*, \alpha_* )          & = 0 = \nabla_x f(x_*) + \lambda_* \nabla_x \Psi(x_*, \alpha_*) \\ 
+    %     \nabla_\lambda J( x_*, \lambda_*, \alpha_* )    & = 0 = \Psi(x_*, \alpha_*) \\  
+    %     \nabla_\alpha J( x_*, \lambda_*, \alpha_* )    & = 0 = 2 \alpha \lambda . 
+    % \end{align}
+
+    % Constrained optimization ... inequality constraints ... Augmented Lagrangian ... 
+    
+\end{frame} 
+
+\begin{frame}{Optimization}
+
+    The first-order necessary conditions for a solution to be optimal are called the KKT conditions
+
+    \begin{enumerate}
+        % \item $ 0 = \nabla_x f(x_*) + \lambda_* \nabla_x c(x_*) + \mu_* \nabla_x h(x_*)  $ 
+        \item $ 0 = \nabla_x L $ 
+        \item $ h(x_*) \leq 0 $ 
+        \item $ \lambda_*^h h(x_*) = 0 $  
+        \item $ \lambda_*^h \geq 0 $ 
+        \item $ c(x_*) = 0 $, 
+    \end{enumerate}
+
+    where $ \lambda_*^h $ are the Lagrange multipliers for the inequality constraints. The KKT conditions apply to equality and inequality-constrained optimization problems. 
+    
+\end{frame}
+
+\begin{frame}{Optimization} 
+
+    Our augmented Lagrangian is 
+% 
+    \begin{equation}
+        L = f + \lambda \Psi + \frac{\rho}{2} \Psi^2. 
+    \end{equation} 
+% 
+    The first-order necessary conditions result in 
+    % 
+    \begin{align}
+        \nabla_x L & = \nabla_x f + \lambda \nabla_x \Psi + \rho \Psi \nabla_x \Psi & = 0 \\ 
+        \nabla_x L & = \nabla_x f + ( \lambda + \rho \Psi ) \nabla_x \Psi & = 0 
+        % \Psi(x_*, \alpha_*)     & = 0 \\ 
+        % 2 \alpha_* \lambda_*    & = 0 . 
+    \end{align} 
+% 
+    We note that when $ \alpha = 0 $, then the solution lies on the boundary of the feasible region (as if $h(x_*)$ were an equality constraint). This means that the constraint is active, or $ h = \Psi $. 
+
+    However, when $ \alpha > 0 $, then the solution lies off the boundary---which means that $h$ is inactive, and we can solve the unconstrained problem as if $h$ did not exist. 
+     
+\end{frame} 
+
+\begin{frame}{Optimization}
+
+    Currently, the inequality constraint boundary is at $ h = 0 $. If $h > 0$, then proceed with minimization with $h$ as an equality constraint:  
+% 
+    \begin{align}
+        L & = f + \lambda h + \frac{\rho}{2} h^2 \\ 
+        \nabla_x L & = \nabla_x f + ( \lambda + \rho h ) \nabla_x h 
+    \end{align}
+% 
+    Otherwise, solve unconstrained problem as if $h$ didn't exist: 
+% 
+    \begin{align}
+        L & = f \\ 
+        \nabla_x L & = \nabla_x f 
+    \end{align}
+
+\end{frame}
+
+\begin{frame}{Optimization}
+    % 
+    However, there is a discontinuity in both $L$ and $\nabla_x L$. To fix: 
+    \begin{enumerate}
+        \item $ \nabla_x L $: Move boundary to $ h = -\lambda / \rho $ to remove coefficient of $ \nabla_x h $
+        \item L: add constant $ -\frac{\lambda^2}{2 \rho} $ to unconstrained $L = f$ so that $L$ at $ h = \lambda / \rho $ is continuous at the solution boundary 
+    \end{enumerate}
+% 
+    If $h > -\lambda / \rho$, then proceed with $h$ as an equality constraint:  
+% 
+    \begin{align}
+        L & = f + \lambda h + \frac{\rho}{2} h^2 \\ 
+        \nabla_x L & = \nabla_x f + ( \lambda + \rho h ) \nabla_x h 
+    \end{align}
+% 
+    Otherwise, solve unconstrained problem as if $h$ didn't exist: 
+% 
+    \begin{align}
+        L & = f - \frac{\lambda^2}{2 \rho} \\ 
+        \nabla_x L & = \nabla_x f 
+    \end{align}
+    
+    
+\end{frame}
+
+\begin{frame}{Optimization} 
+
+    Additionally, the Lagrange multiplier update rule must be updated for inequality constraints due to the KKT condition $ \lambda_* \geq 0 $
+% 
+    \begin{equation}
+        \lambda_{k+1} = max( \lambda_k + \rho_k h_k, 0 ). 
+        \label{eq:ineq_update}
+    \end{equation} 
+% 
+    % The steps for dual ascent are updated as follows 
+% 
+    Now, an algorithm for minimizing an equality and inequality-constrained optimization problem:  
+    % 
+    \begin{algorithm}[H]
+    \begin{algorithmic}[1]
+        \STATE Initialize $\lambda = 0$, $\rho = 10$, $ \gamma = 2 $, and $tol = 1e-6$
+        \STATE Minimize $L$ as unconstrained problem 
+        \STATE Check convergence: $dx < tol$, $c(x) < tol$ and $h(x) <= 0$
+        \STATE Update equality constraints via \eqref{eq:eq_update}
+        \STATE Update inequality constraints via \eqref{eq:ineq_update}
+    \end{algorithmic}
+    \caption{Equality and inequality-constrained optimization}
+    \label{alg:seq}
+    \end{algorithm}
+    Repeat steps 2-5 until convergence. 
+    
+\end{frame} 
+
+
