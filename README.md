@@ -9,7 +9,8 @@ strategy — and what it gives up in safety.
 
 **Target: ECC 2027**, paper due **Oct 31 2026** via PaperCept. Review copy ≤ 8 pages, final
 ≤ 6 (+2 paid); ieeeconf, US Letter, PDF ≤ 3 MB. Notification Mar 5, final Apr 5 2027.
-([CFP](https://ecc27.euca-ecc.org/call-for-papers/)) The paper is in `Game_Theory_Space_ECC_2027/`.
+([CFP](https://ecc27.euca-ecc.org/call-for-papers/)) The live paper is in **Overleaf**; the copy
+in `Game_Theory_Space_ECC_2027/` lags behind it.
 A CDC 2026 version was rejected; its reviews are in `Game_Theory_Space_ECC_2027/reviews/`.
 
 Every number below has its interval and run details in `LOG.md`. The full method and results
@@ -20,7 +21,7 @@ write-up is archived in `docs/README_narrative_2026-10-18.md`.
 A **game-theoretic receding-horizon guidance law**, with three contributions:
 
 1. **The finite approximation is faithful, with a bound.** Shrinking an action set moves the
-   game value in a known direction, and `|V_M − V_cont| ≤ L·h_M`. Measured, the six-vertex
+   game value in a known direction, and `|V_M − V_C| ≤ ℓ·h_M` (Proposition 1, on the circle C). Measured, the six-vertex
    value is within ~1.5% of the extrapolated continuous value.
 2. **It solves reliably and fast.** The nonconvex trajectory NLP is solved locally by LBFGS,
    and each LP is checked by a solver-independent certificate.
@@ -64,7 +65,8 @@ A **game-theoretic receding-horizon guidance law**, with three contributions:
 
 ## Paper to-do
 
-The author is editing in **Overleaf**; the repo `MAIN_PAPER.tex` lags behind it.
+The author is editing in **Overleaf**; the repo `MAIN_PAPER.tex` lags behind it, so the ✅
+marks below describe the repo copy as of 10-20.
 
 **1. ✅ Remove what is no longer true** (done 2026-10-18; red TODOs mark the gaps). Abstract numbers; Tables I–III and all three results
 figures; the setup paragraph (OSQP, 1e-4 floor, λ₂ = 0.1, identical orbits); "dominant";

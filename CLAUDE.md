@@ -9,9 +9,7 @@ Guidance for Claude Code when working in this repository. When responding to pro
 - **Goal:** submit to **ECC 2027 by Oct 31 2026** (PaperCept; review copy ≤ 8 pp, final ≤ 6 pp;
   ieeeconf, PDF ≤ 3 MB; CFP silent on blind review). Write for a **controls audience**.
 - **Research:** Gates A–C and the type-based (Meta) sweep are done. No new sweeps are planned.
-- **Paper:** the author is now editing **in Overleaf**, and the repo `MAIN_PAPER.tex` is behind it.
-  **Do not edit the paper files unless asked**; suggest text in chat. Pull before touching them.
-  Everything is drafted: methods, lifting bound, all results, type-based reasoning (10-20) and
+- **Paper:** the author is now editing **in Overleaf** (see § The paper). Everything is drafted: methods, lifting bound, all results, type-based reasoning (10-20) and
   all six figures (10-20). **Left:** the ISS 200 m keep-out citation (last red marker), fitting
   the page limit (~7,400 words with six figures, well over 6 pages), and the submission checks
   in `README.md` § Paper to-do.
@@ -43,8 +41,12 @@ Guidance for Claude Code when working in this repository. When responding to pro
 
 ## The paper
 
-- **Edit the `.tex` files in `Game_Theory_Space_ECC_2027/` directly.** That folder is the paper.
-- **The whole paper is in `MAIN_PAPER.tex`.** Edit only that file, plus `macros.tex` (the
+- **The live paper is in Overleaf, not the repo (since 2026-10-27).** The author edits it
+  there, and the repo copy in `Game_Theory_Space_ECC_2027/` lags behind it. **Do not edit the
+  paper files.** Suggest LaTeX text in chat for the author to paste. Pasted Overleaf text is
+  newer than the repo copy; if the pasted text has a stale claim, flag it (it may be old CDC text).
+  Edit the repo copy only if the author asks, and only after they have synced it from Overleaf.
+- **The whole paper is in `MAIN_PAPER.tex`**, plus `macros.tex` (the
   preamble, `\input{macros}`). The `sections/` folder was deleted (commit 4b8c7a4).
   `root_template.tex` and `root.pdf` are the ECC template, not the paper. `MAIN_PRES.tex` and
   `pres_*` are not part of the paper.
