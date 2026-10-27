@@ -4,26 +4,26 @@ Guidance for Claude Code when working in this repository. When responding to pro
 
 ## Current state
 
-*Rewritten in place each session. Keep it short — results go in `LOG.md`, not here. Last updated: 2026-10-19.*
+*Rewritten in place each session. Keep it short — results go in `LOG.md`, not here. Last updated: 2026-10-27.*
 
 - **Goal:** submit to **ECC 2027 by Oct 31 2026** (PaperCept; review copy ≤ 8 pp, final ≤ 6 pp;
   ieeeconf, PDF ≤ 3 MB; CFP silent on blind review). Write for a **controls audience**.
-- **Research:** Gates A–C are done. No new sweeps are planned.
-- **Paper:** paper steps 1–3 are drafted in `MAIN_PAPER.tex` (stale claims removed, methods
-  fixed against the reviews, lifting bound and all results written). **Next: the ISS 200 m keep-out
-  citation (last red marker), then figures (step 4), then fit the page limit** (~5,200 words;
-  probably over 6 pages). The to-do list is in `README.md` § Paper to-do.
+- **Research:** Gates A–C and the type-based (Meta) sweep are done. No new sweeps are planned.
+- **Paper:** the author is now editing **in Overleaf**, and the repo `MAIN_PAPER.tex` is behind it.
+  **Do not edit the paper files unless asked**; suggest text in chat. Pull before touching them.
+  Everything is drafted: methods, lifting bound, all results, type-based reasoning (10-20) and
+  all six figures (10-20). **Left:** the ISS 200 m keep-out citation (last red marker), fitting
+  the page limit (~7,400 words with six figures, well over 6 pages), and the submission checks
+  in `README.md` § Paper to-do.
 - **Review gaps G1–G3 are closed in the text.** G2 is handled by Proposition 1 plus a scope paragraph.
 - **Open defects:** D12 (deferred, off the hot path). D13 closed 2026-10-20 (FP learner type added).
-- **New since Gate C (2026-10-20):** type-based reasoning (`Meta_greedy`, with the FP type).
-  18-cell sweep in `test/results/n30/` (`test/run_meta.jl`, `test/analyze_meta.jl`). It is
-  the strongest pursuer (column mean 3.84 km vs FP's 4.82). As evader it ties FP on
-  separation but cuts soft capture against an FP pursuer from 91% to 9%. Not yet in the paper.
-- **Machine:** work is now on the **32-core Linux machine**, which has the full Gate B/C results
-  in `test/results/`. The 8-core Mac (used 10-17 to 10-19) only had `mixed`/`mixed` and
-  `FP_greedy`/`FP_greedy`. Solver reliability, C4 CIs and C3 were re-run here on 10-19. Every
-  number the paper uses now comes from this machine.
-- **Repo:** last commit 7ba73fe, working tree clean.
+- **Type-based reasoning** (`Meta_greedy` with the FP type; 18-cell sweep in `test/results/n30/`,
+  `test/run_meta.jl`, `test/analyze_meta.jl`) is in the paper. It is the strongest pursuer
+  (column mean 3.84 km vs FP's 4.82). As evader it ties FP on separation but cuts soft capture
+  against an FP pursuer from 91% to 9%.
+- **Machine:** the **32-core Linux machine** has the full results in `test/results/`. Every number
+  the paper uses comes from it. The 8-core Mac only has a subset.
+- **Repo:** last commit 8990f3d, working tree clean.
 
 ## Working rules
 
@@ -84,9 +84,10 @@ julia -t 32 --project=.        # ALWAYS pass -t; Threads.nthreads() defaults to 
 - **Run from the repo root** — all result paths are relative.
 - `test/runtests.jl` — the real test suite (3,369 assertions). Run it after any solver change.
 - Sweep drivers: `test/run_gate_b.jl` (5×5 × 100 × 30, ~106 min on 32 threads), `run_b6.jl`,
-  `run_c1c2.jl`, `run_c1_asym.jl`, `run_c2_fill.jl`, `run_c4.jl`.
+  `run_c1c2.jl`, `run_c1_asym.jl`, `run_c2_fill.jl`, `run_c4.jl`, `run_meta.jl`.
 - Analysis: `test/analyze_gate_b.jl`, `analyze_b6.jl`, `analyze_c1c2.jl`, `analyze_c3.jl`,
-  `analyze_c4.jl`. Results go to `test/results/` (gitignored).
+  `analyze_c4.jl`, `analyze_meta.jl`, `analyze_solver.jl`. Paper figures: `figures_paper.jl`.
+  Results go to `test/results/` (gitignored).
 - Everything else in `test/` is a REPL-style script, not a test.
 - **Cost** (32-core, `test/bench_step.jl`, `-t 1`): 11.6 ms per LBFGS solve, 0.16 s per game step.
   The `t_solve` recorded in sweeps is ~17× higher because 32 games contend for the processor.
