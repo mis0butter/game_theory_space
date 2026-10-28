@@ -12,10 +12,14 @@
 using trajectory_optimization_game_theory
 using LinearAlgebra, Random, Statistics, Printf
 
-const STRATS  = ["greedy", "mixed", "random", "FP_greedy", "FP_mixed"]
+# WITH_META=1 adds the type-based player as a sixth strategy (6x6 tournament; its
+# 11 cells come from test/run_meta.jl under the same common random numbers).
+const STRATS  = get(ENV, "WITH_META", "0") == "1" ?
+                ["greedy", "mixed", "random", "FP_greedy", "FP_mixed", "Meta_greedy"] :
+                ["greedy", "mixed", "random", "FP_greedy", "FP_mixed"]
 const NG, NS  = 100, 30
 const SHORT   = Dict("greedy"=>"grdy", "mixed"=>"mixed", "random"=>"rand",
-                     "FP_greedy"=>"FPg", "FP_mixed"=>"FPm")
+                     "FP_greedy"=>"FPg", "FP_mixed"=>"FPm", "Meta_greedy"=>"Meta")
 
 "Per-game metrics, computed only from fields that survive slim persistence."
 function game_metrics(g)

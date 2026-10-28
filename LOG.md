@@ -6,6 +6,36 @@ identifier), what was decided, what was measured, what is predicted for the next
 
 ---
 
+## 2026-10-27 — 6×6 tournament: type-based joins as the sixth strategy (analysis only)
+
+**Decided.** The paper presents one 6×6 tournament (5 Gate B strategies + `Meta_greedy`) instead
+of a 5×5 plus "18 further matchups". The 11 Meta cells share the Gate B CRN and the inert check
+holds, so merging is legitimate. Hedge is cut from the paper (FP-mixed is already out of library).
+
+**Ran.** `WITH_META=1 julia -t 8 --project=. test/analyze_gate_b.jl` (new env switch) and
+`FIG_OUTDIR=figures/paper test/figures_paper.jl` (now 6×6; writes outside the paper folder).
+No new games. 32-core machine.
+
+**Measured** (mean separation, S = 30, pooled 95% CI over 600 games):
+- Evader row means: **type-based 5.81 ± 0.13**, FP-mixed 5.51 ± 0.10, FP-greedy 5.50 ± 0.16,
+  minimax 5.35 ± 0.08, greedy 5.06 ± 0.11, random 5.04 ± 0.08.
+- Pursuer column means: **type-based 3.94 ± 0.09**, FP-greedy 4.81 ± 0.05, greedy 5.02 ± 0.06,
+  minimax 5.27 ± 0.06, FP-mixed 5.77 ± 0.07, random 7.46 ± 0.11.
+- The type-based column has the lowest mean in every row; vs a minimax evader it only ties
+  FP-greedy (4.85 vs 4.87). Lowest cells: FP-greedy vs type-based 2.67, greedy vs type-based
+  2.68, both 100% hard capture.
+- FP-greedy − minimax evader, vs a type-based pursuer: **−2.176 ± 0.038** (t = −113).
+- EGTA meta-game on the 6×6 means: **pure equilibrium (minimax evader, type-based pursuer),
+  value 4.848 km** (cert 2.2e-14). No row weakly dominates all others. The 5×5 result (FP-greedy
+  in the support on both sides) holds only without the type-based player.
+- ΔV: the clean "FP evaders spend less" split is gone. Learner evaders 144–293 m/s, non-learner
+  169–266 m/s; pursuers 251–371 m/s.
+
+**Consequence for the paper.** "FP-greedy is the best evader and best pursuer" and "FP vs FP is
+the lowest separation" are false in the 6×6. Heatmap, boxplot and ΔV figures regenerated.
+
+**Predicted.** Nothing; no further runs planned.
+
 ## 2026-10-20 — type-based reasoning written into `MAIN_PAPER.tex`
 
 **Paper edits:**

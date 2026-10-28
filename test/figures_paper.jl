@@ -10,8 +10,10 @@
 # figure can be cross-checked against LOG.md before it goes in the paper.
 #
 #   F1  fig_game_step        one game step, steps 2/5/10 (regenerates k_replan_*)
-#   F2  fig_heatmap          5×5 mean separation, windows S = 5/10/30 (regenerates heatmap)
-#   F3  fig_boxplot          per-game separation by strategy and window (regenerates boxplot)
+#   F0  fig_summary          advantage over minimax per strategy, paired CIs (opening results figure)
+#   F2  fig_heatmap          6×6 mean separation (incl. type-based), separation AT s = 5/10/30, pursuer on y, one shared red-blue scale
+#   F2b fig_heatmap_stacked  S = 10 over S = 30, pursuer on y, evader on x, one shared scale
+#   F3  fig_boxplot          per-game separation by strategy, 5-step windows 1-5 / 6-10 / 26-30
 #   F4  fig_dv_vs_sep        executed ΔV vs separation per matchup (regenerates ΔV scatter)
 #   F5  fig_price_of_safety  separation vs step: oracle / FP / minimax pursuers (new)
 #   F6  fig_learning         separation vs step and paired FP − minimax gap (new)
@@ -29,13 +31,17 @@ CairoMakie.activate!(type = "pdf")
 using LinearAlgebra, Random, Statistics, Printf
 
 const NG, NS   = 100, 30
-const STRATS   = ["FP_greedy", "FP_mixed", "greedy", "mixed", "random"]
+# The type-based player (Meta_greedy, test/run_meta.jl) is the tournament's sixth strategy.
+const STRATS   = ["Meta_greedy", "FP_greedy", "FP_mixed", "greedy", "mixed", "random"]
+const NST      = length(STRATS)
 const LABEL    = Dict("FP_greedy" => "FP-greedy", "FP_mixed" => "FP-mixed", "greedy" => "Greedy",
-                      "mixed" => "Minimax", "random" => "Random", "oracle" => "Oracle")
+                      "mixed" => "Minimax", "random" => "Random", "oracle" => "Oracle",
+                      "Meta_greedy" => "Type-based")
 const WINDOWS  = [5, 10, 30]
 const R_HARD   = 0.2
 const ROOT     = pkgdir(trajectory_optimization_game_theory)
-const OUTDIR   = joinpath(ROOT, "Game_Theory_Space_ECC_2027", "images")
+# The paper lives in Overleaf; FIG_OUTDIR redirects the PDFs away from the repo copy.
+const OUTDIR   = get(ENV, "FIG_OUTDIR", joinpath(ROOT, "Game_Theory_Space_ECC_2027", "images"))
 const PREVIEW  = joinpath(ROOT, "figures", "paper")
 mkpath(OUTDIR); mkpath(PREVIEW)
 
@@ -47,7 +53,8 @@ const COL1, COL2 = 252, 516
 # One color per strategy across EVERY figure; line style is the redundant cue so
 # the figures survive grayscale printing.
 const C = Dict("mixed" => "#2a78d6", "FP_greedy" => "#eb6834", "oracle" => "#1baf7a",
-               "greedy" => "#eda100", "random" => "#e87ba4", "FP_mixed" => "#008300")
+               "greedy" => "#eda100", "random" => "#e87ba4", "FP_mixed" => "#008300",
+               "Meta_greedy" => "#7d52c7")
 const C_E, C_P = "#2a78d6", "#eb6834"          # evader / pursuer (F1, F4)
 const INK, MUTED = "#1a1a19", "#6b6a63"
 const BLUES = ["#cde2fb", "#9ec5f4", "#6da7ec", "#3987e5", "#256abf", "#184f95", "#0d366b"]
@@ -63,6 +70,15 @@ function pick_font()
     "TeX Gyre Heros"
 end
 const FONT = pick_font()
+# Computer Modern (Makie's bundled NewComputerModern), for figures styled to look like LaTeX.
+const LATEX_FONTS = (; (k => theme_latexfonts().fonts[k][] for k in (:regular, :bold, :italic, :bolditalic))...)
+title_S(S) = rich(rich("s", font = :italic), " = $S")   # AT step s (s is the step index)
+title_le(S) = rich(rich("s", font = :italic), " ≤ $S")  # steps 1..S
+title_rng(a, b) = rich(rich("s", font = :italic), " = $(a)–$(b)")   # steps a..b
+"Mean separation over steps a..b of each trial (equal-length steps), averaged over trials."
+win_step(p1, p2, a, b) = mean(mean(T[(p1, p2)].step_sep[g, a:b]) for g in axes(T[(p1, p2)].step_sep, 1))
+# Separation AT step S (mean over that step's executed segments), averaged over trials.
+at_step(a, b, S) = mean(T[(a, b)].step_sep[:, S])
 
 set_theme!(Theme(
     fontsize = 8, figure_padding = (2, 6, 2, 2),
@@ -76,8 +92,29 @@ set_theme!(Theme(
               colgap = 6, padding = (0, 0, 0, 0)),
 ))
 
+"""
+Crop a PDF in place to its drawn content plus `pad` pt, so the page is exactly the
+figure (Makie's canvas keeps empty margins). Needs Ghostscript; skipped if absent.
+"""
+function crop_pdf!(path; pad = 1.0)
+    gs = Sys.which("gs")
+    gs === nothing && (@warn "gs not found; $path left uncropped"; return)
+    err = IOBuffer()                      # the bbox device reports on stderr
+    run(pipeline(`$gs -q -dNOPAUSE -dBATCH -sDEVICE=bbox $path`; stdout = devnull, stderr = err))
+    m = match(r"%%HiResBoundingBox: ([\d.]+) ([\d.]+) ([\d.]+) ([\d.]+)", String(take!(err)))
+    m === nothing && (@warn "no bounding box for $path"; return)
+    x0, y0, x1, y1 = parse.(Float64, m.captures)
+    x0, y0, x1, y1 = x0 - pad, y0 - pad, x1 + pad, y1 + pad
+    tmp = path * ".crop.pdf"
+    run(pipeline(`$gs -q -dNOPAUSE -dBATCH -sDEVICE=pdfwrite -o $tmp
+                  -dDEVICEWIDTHPOINTS=$(round(Int, ceil(x1 - x0))) -dDEVICEHEIGHTPOINTS=$(round(Int, ceil(y1 - y0)))
+                  -dFIXEDMEDIA -c "<</PageOffset [$(-x0) $(-y0)]>> setpagedevice" -f $path`))
+    mv(tmp, path; force = true)
+end
+
 function savefig(fig, name)
     save(joinpath(OUTDIR, name * ".pdf"), fig; pt_per_unit = 1)
+    crop_pdf!(joinpath(OUTDIR, name * ".pdf"))
     save(joinpath(PREVIEW, name * ".png"), fig; px_per_unit = 4)
     println("  wrote images/$name.pdf")
 end
@@ -111,61 +148,283 @@ const B6 = Dict{Tuple{Any,String},Any}((v, p) => cell(string(v), p) for v in 1:6
 B6[("mixed", "oracle")] = cell("mixed", "oracle")
 
 # ---------------------------------------------------------------- F2 heatmap
+# Diverging red <-> blue around a gray midpoint (dataviz reference pair). The
+# midpoint is minimax vs minimax: red = closer than equilibrium play (pursuer's
+# favor), blue = farther (evader's favor).
+const DIVERGING = ["#6b2508", "#a8431a", "#eb6834", "#f5b896", "#f0efec",     # burnt orange arm
+                   "#9fb9de", "#5f87c0", "#355f9e", "#22406f"]                # steel blue arm (one step deeper)
+
+# One sequential ramp per window, applied REVERSED (darker = closer, lighter = farther): a muted steel
+# blue, a muted lavender, and the palette's orange.
+const RAMP_S = Dict(
+    5  => ["#e6eef8", "#c6d7ee", "#a1bde2", "#7ba0d3", "#5a84c2", "#4069a8", "#2c4f85"],   # steel blue
+    10 => ["#efe9f4", "#dccfe8", "#c2aed6", "#a68bc2", "#8a6aab", "#6c4f8c", "#4d3766"],   # muted lavender
+    30 => ["#fde6da", "#f9c4a8", "#f39b72", "#eb6834", "#c94f1e", "#9a3a14", "#6b2508"])   # palette orange
+
+const WIN5 = [(1, 5), (6, 10), (26, 30)]   # trailing 5-step windows
+
 function fig_heatmap()
-    println("\nF2 — mean separation [km], rows evader, cols pursuer")
-    # Each window gets its own colour scale: the windows differ by ~3x in level
-    # (the approach from ≈36 km dominates short windows), so a shared scale washes
-    # out the S = 30 panel. Colour shows the ranking WITHIN a window; the printed
-    # numbers carry the values, so no colourbar.
-    fig = Figure(size = (COL2, 170))
-    Ms = Dict(S => [mean(T[(a, b)].win[S]) for a in STRATS, b in STRATS] for S in WINDOWS)
-    labs = [LABEL[s] for s in STRATS]
-    for (i, S) in enumerate(WINDOWS)
-        M = Ms[S]
-        lo, hi = extrema(M)
-        @printf("  S = %d\n", S)
-        for (r, a) in enumerate(STRATS)
-            @printf("    %-10s %s\n", a, join([@sprintf("%5.2f", M[r, c]) for c in 1:5], " "))
+    # Mean separation over a trailing 5-STEP WINDOW (steps 1-5, 6-10, 26-30), averaged
+    # over trials: unlike the running mean from step 1 (fig_heatmap_alltime), later panels
+    # are not diluted by the opening approach. Pursuer on y, evader on x; per-panel
+    # sequential ramps (steel blue / lavender / orange), darker = closer, colour depth
+    # growing with each panel's range (sqrt of the ratio). Random pursuer omitted.
+    PURS = filter(!=("random"), STRATS)
+    NP = length(PURS)
+    println("\nF2 — mean separation over 5-step windows [km], rows pursuer, cols evader")
+    fig = Figure(size = (COL2, 175), fonts = LATEX_FONTS)
+    Ms = Dict(w => [win_step(a, b, w...) for a in STRATS, b in PURS] for w in WIN5)   # [evader, pursuer]
+    # The two post-approach windows (6-10, 26-30) cover nearly the same range, so they
+    # share ONE range: equal km get equal depth in both, despite the different hues.
+    late = WIN5[2:end]
+    lo_l = minimum(minimum(Ms[w]) for w in late); hi_l = maximum(maximum(Ms[w]) for w in late)
+    span_max = max(hi_l - lo_l, -(reverse(extrema(Ms[WIN5[1]]))...))
+    for (i, w) in enumerate(WIN5)
+        M = Ms[w]
+        lo, hi = w in late ? (lo_l, hi_l) : extrema(M)
+        frac = sqrt((hi - lo) / span_max)
+        # late windows share the orange ramp and ONE colourbar; the approach window is blue
+        g = cgrad(reverse(RAMP_S[w in late ? 30 : 5]))   # dark (close) -> light (far)
+        cmap = [g[t] for t in range(1 - frac, 1; length = 64)]
+        @printf("  s = %d-%d   range [%.2f, %.2f]   depth %.0f%% of ramp\n", w..., lo, hi, 100frac)
+        for (c, b) in enumerate(PURS)
+            @printf("    P %-11s %s\n", b, join([@sprintf("%5.2f", M[r, c]) for r in 1:NST], " "))
         end
-        ax = Axis(fig[1, i]; title = "First S = $S steps [km]", aspect = DataAspect(),
-                  xticks = (1:5, labs), yticks = (1:5, labs), xticklabelrotation = π / 4,
-                  yreversed = true, xlabel = "Pursuer", ylabel = i == 1 ? "Evader" : "",
-                  yticklabelsvisible = i == 1, ygridvisible = false,
-                  topspinevisible = true, rightspinevisible = true)
-        heatmap!(ax, 1:5, 1:5, permutedims(M); colormap = BLUES[1:6], colorrange = (lo, hi))
-        for r in 1:5, c in 1:5
-            v = M[r, c]
-            text!(ax, c, r; text = @sprintf("%.2f", v), align = (:center, :center), fontsize = 6.5,
-                  color = v > lo + 0.6(hi - lo) ? :white : INK)
-        end
+        ax = Axis(fig[1, 2i-1]; title = title_rng(w...), aspect = DataAspect(),
+                  xticks = (1:NST, [LABEL[s] for s in STRATS]), yticks = (1:NP, [LABEL[s] for s in PURS]),
+                  xticklabelrotation = π / 4, xticksvisible = false, yticksvisible = false,
+                  yreversed = false,   # type-based at the bottom-left corner of both axes
+                  xlabel = "Evader", ylabel = i == 1 ? "Pursuer" : "",
+                  yticklabelsvisible = i == 1, ygridvisible = false)   # left/bottom spines only
+        hm = heatmap!(ax, 1:NST, 1:NP, M; colormap = cmap, colorrange = (lo, hi))
+        # one bar per panel for a balanced layout; the 6-10 and 26-30 bars are identical
+        Colorbar(fig[1, 2i], hm; label = i == length(WIN5) ? "Mean separation [km]" : "",
+                 width = 5, ticksize = 2, ticklabelsize = 6.5, labelsize = 7,
+                 tellheight = false, height = Relative(0.62),
+                 spinewidth = 0)   # no border; per-side spine flags are ignored in Makie 0.22
     end
-    colgap!(fig.layout, 6)
+    for i in 1:length(WIN5)
+        colgap!(fig.layout, 2i - 1, 3)
+    end
     savefig(fig, "fig_heatmap")
 end
 
+function fig_heatmap_alltime()
+    # Mean separation over steps 1..s for s = 5/10/30 (each trial's time-average, then
+    # averaged over trials), pursuer on y, evader on x. Each panel has ITS OWN sequential
+    # ramp (steel blue / lavender / orange) and colourbar, darker = closer; colour depth
+    # grows with the panel's range (sqrt of the ratio to the widest). The s ≤ 30 panel
+    # is the whole-game mean the results text quotes. Random pursuer omitted.
+    PURS = filter(!=("random"), STRATS)
+    NP = length(PURS)
+    println("\nF2 — mean separation over steps 1..s [km], rows pursuer, cols evader (random pursuer omitted)")
+    fig = Figure(size = (COL2, 175), fonts = LATEX_FONTS)
+    Ms = Dict(S => [mean(T[(a, b)].win[S]) for a in STRATS, b in PURS] for S in WINDOWS)   # [evader, pursuer]
+    span_max = maximum(-(reverse(extrema(M))...) for M in values(Ms))
+    for (i, S) in enumerate(WINDOWS)
+        M = Ms[S]
+        lo, hi = extrema(M)
+        frac = sqrt((hi - lo) / span_max)
+        g = cgrad(reverse(RAMP_S[S]))                 # dark (close) -> light (far)
+        cmap = [g[t] for t in range(1 - frac, 1; length = 64)]
+        @printf("  s ≤ %d   range [%.2f, %.2f]   depth %.0f%% of ramp\n", S, lo, hi, 100frac)
+        ax = Axis(fig[1, 2i-1]; title = title_le(S), aspect = DataAspect(),
+                  xticks = (1:NST, [LABEL[s] for s in STRATS]), yticks = (1:NP, [LABEL[s] for s in PURS]),
+                  xticklabelrotation = π / 4, xticksvisible = false, yticksvisible = false,
+                  yreversed = false,   # type-based at the bottom-left corner of both axes
+                  xlabel = "Evader", ylabel = i == 1 ? "Pursuer" : "",
+                  yticklabelsvisible = i == 1, ygridvisible = false)   # left/bottom spines only
+        hm = heatmap!(ax, 1:NST, 1:NP, M; colormap = cmap, colorrange = (lo, hi))
+        Colorbar(fig[1, 2i], hm; label = i == length(WINDOWS) ? "Mean separation [km]" : "",
+                 width = 5, ticksize = 2, ticklabelsize = 6.5, labelsize = 7,
+                 tellheight = false, height = Relative(0.62),
+                 spinewidth = 0)   # no border; per-side spine flags are ignored in Makie 0.22
+    end
+    for i in 1:length(WINDOWS)
+        colgap!(fig.layout, 2i - 1, 3)
+    end
+    savefig(fig, "fig_heatmap_alltime")
+end
+
+function fig_heatmap_at()
+    # Separation AT step s = 5/10/30 (averaged over trials), pursuer on y, evader on x.
+    # At-step values span similar ranges in every panel (~0.2-4.5 km; the approach from
+    # ≈36 km no longer inflates the early panel), so all three share ONE colour scale and
+    # one colourbar. White = minimax vs minimax (mean of the three steps): red = closer than
+    # equilibrium play (pursuer's favor), blue = farther (evader's favor). Equal km from
+    # white get equal colour strength on both sides; the bar spans only the data range.
+    # The random PURSUER row is left out: it ignores the payoff matrix, so it is never
+    # a sensible pursuer. Random stays as an evader (the unpredictable baseline).
+    PURS = filter(!=("random"), STRATS)
+    NP = length(PURS)
+    println("\nF2 — separation AT step s [km], rows pursuer, cols evader (random pursuer omitted)")
+    fig = Figure(size = (COL2, 175), fonts = LATEX_FONTS)
+    Ms = Dict(S => [at_step(a, b, S) for a in STRATS, b in PURS] for S in WINDOWS)   # [evader, pursuer]
+    lo = minimum(minimum.(values(Ms))); hi = maximum(maximum.(values(Ms)))
+    jm, im = findfirst(==("mixed"), PURS), findfirst(==("mixed"), STRATS)
+    mid = mean(Ms[S][im, jm] for S in WINDOWS)
+    d = max(mid - lo, hi - mid)
+    g = cgrad(DIVERGING)                              # symmetric about mid over [mid-d, mid+d]
+    cmap = [g[t] for t in range((lo - mid + d) / 2d, (hi - mid + d) / 2d; length = 128)]
+    @printf("  shared scale [%.2f, %.2f] km, white at minimax/minimax = %.2f km (steps: %s)\n", lo, hi, mid,
+            join([@sprintf("%.2f", Ms[S][im, jm]) for S in WINDOWS], ", "))
+    local hm
+    for (i, S) in enumerate(WINDOWS)
+        M = Ms[S]
+        @printf("  s = %d\n", S)
+        for (c, b) in enumerate(PURS)
+            @printf("    P %-11s %s\n", b, join([@sprintf("%5.2f", M[r, c]) for r in 1:NST], " "))
+        end
+        ax = Axis(fig[1, i]; title = title_S(S), aspect = DataAspect(),
+                  xticks = (1:NST, [LABEL[s] for s in STRATS]), yticks = (1:NP, [LABEL[s] for s in PURS]),
+                  xticklabelrotation = π / 4, xticksvisible = false, yticksvisible = false,
+                  yreversed = false,   # type-based at the bottom-left corner of both axes
+                  xlabel = "Evader", ylabel = i == 1 ? "Pursuer" : "",
+                  yticklabelsvisible = i == 1, ygridvisible = false)   # left/bottom spines only
+        hm = heatmap!(ax, 1:NST, 1:NP, M; colormap = cmap, colorrange = (lo, hi))
+        # no numbers in the cells (author's choice); the values print to stdout above
+    end
+    Colorbar(fig[1, length(WINDOWS) + 1], hm; label = "Separation [km]",
+             width = 5, ticksize = 2, ticklabelsize = 6.5, labelsize = 7,
+             tellheight = false, height = Relative(0.62),
+             spinewidth = 0)   # no border; per-side spine flags are ignored in Makie 0.22
+    colgap!(fig.layout, 8)
+    savefig(fig, "fig_heatmap_at")
+end
+
+"""
+F2b — S = 10 and S = 30 only, stacked (S = 10 on top), one column wide, with the
+roles flipped: pursuer on y, evader on x. ONE colour scale shared by both panels
+(min to max over both), so equal numbers get equal colours across panels. With no
+meaningful reference value the scale is SEQUENTIAL, one hue (darker = closer),
+not diverging.
+Random pursuer omitted, as in F2.
+"""
+function fig_heatmap_stacked()
+    PURS = filter(!=("random"), STRATS)
+    NP = length(PURS)
+    Ms = Dict(S => [at_step(a, b, S) for a in STRATS, b in PURS] for S in (10, 30))  # [evader, pursuer], AT step S
+    lo = minimum(minimum.(values(Ms))); hi = maximum(maximum.(values(Ms)))
+    println("\nF2b — mean separation [km], stacked S = 10 / 30, rows pursuer, cols evader")
+    @printf("  shared scale [%.2f, %.2f]\n", lo, hi)
+    fig = Figure(size = (COL1, 330), fonts = LATEX_FONTS)
+    local hm
+    for (i, S) in enumerate((10, 30))
+        M = Ms[S]
+        last = i == 2
+        ax = Axis(fig[i, 1]; title = title_S(S), aspect = DataAspect(),
+                  xticks = (1:NST, [LABEL[s] for s in STRATS]), yticks = (1:NP, [LABEL[s] for s in PURS]),
+                  xticklabelrotation = π / 4, xticklabelsvisible = last,
+                  xticksvisible = false, yticksvisible = false,
+                  xlabel = last ? "Evader" : "", ylabel = "Pursuer",
+                  yreversed = false,   # type-based in the bottom-left corner of both axes
+                  ygridvisible = false)   # left/bottom spines only
+        hm = heatmap!(ax, 1:NST, 1:NP, M; colormap = cgrad(reverse(BLUES)), colorrange = (lo, hi))
+        # no numbers in the cells (author's choice)
+    end
+    Colorbar(fig[1:2, 2], hm; label = "Mean separation [km]", width = 6, ticksize = 2,
+             ticklabelsize = 6.5, labelsize = 7, tellheight = false, height = Relative(0.75),
+             spinewidth = 0)   # no border; per-side spine flags are ignored in Makie 0.22
+    colgap!(fig.layout, 1, 5)
+    rowgap!(fig.layout, 4)
+    savefig(fig, "fig_heatmap_stacked")
+end
+
+# ---------------------------------------------------------------- F0 summary
+"""
+F0 — the results' opening figure: each strategy's ADVANTAGE over minimax play, as evader
+and as pursuer, with paired 95% CIs (common random numbers: trial g has the same initial
+conditions in every cell). Advantage is signed so right = better in both panels:
+evader  +(sep(X, P) - sep(minimax, P)),  pursuer  -(sep(E, X) - sep(E, minimax)).
+Whole-game mean separation (the metric the text quotes). Two dots per strategy: filled =
+pooled over all six opponents (600 pairs), hollow = against the type-based opponent (100);
+the two sit on the strategy's row, joined by a connector (dumbbell).
+"""
+function fig_summary()
+    M = "Meta_greedy"
+    ROWS = ["Meta_greedy", "FP_greedy", "FP_mixed", "greedy", "random"]   # minimax is the 0 line
+    sep(e, p) = T[(e, p)].win[30]
+    ci(d) = (mean(d), 1.96std(d) / sqrt(length(d)))
+    adv(role, x, opps) = role == 1 ?
+        vcat((sep(x, o) .- sep("mixed", o) for o in opps)...) :
+        vcat((-(sep(o, x) .- sep(o, "mixed")) for o in opps)...)
+    C_ALL, C_TB = "#2c4f85", "#c94f1e"
+    println("\nF0 — advantage over minimax [km], paired 95% CI (right = better)")
+    fig = Figure(size = (215, 235), fonts = LATEX_FONTS)
+    ny = length(ROWS)
+    for (k, role) in enumerate(("Evader", "Pursuer"))
+        ax = Axis(fig[k, 1]; title = "($(('a','b')[k])) As $(lowercase(role))",   # stacked: evader on top
+                  yticks = (1:ny, [LABEL[r] for r in ROWS]), yreversed = true,
+                  yticksvisible = false, ygridvisible = false,
+                  xgridvisible = true, xgridcolor = (:black, 0.07), xticksvisible = false,
+                  yticklabelsize = 7, xticklabelsize = 7, titlesize = 8)   # labels below title size
+        vlines!(ax, 0; color = MUTED, linewidth = 0.6)
+        # minimax is the reference: its advantage over itself is 0 in every matchup
+        text!(ax, 0, 0.45; text = "Minimax", align = (:right, :bottom), offset = (-2, 0), fontsize = 6.5, color = MUTED)
+        for (i, x) in enumerate(ROWS)
+            # dumbbell: both dots on the strategy's row, joined by a thin connector drawn first
+            ests = [ci(adv(k, x, opps)) for opps in (STRATS, [M])]
+            lines!(ax, [ests[1][1], ests[2][1]], [i, i]; color = (MUTED, 0.6), linewidth = 0.8)
+            for (j, (col, filled)) in enumerate(((C_ALL, true), (C_TB, false)))
+                m, h = ests[j]
+                @printf("  %-7s %-11s %-12s %+6.3f ± %.3f\n", role, x, filled ? "all opps" : "vs type-based", m, h)
+                rangebars!(ax, [i], [m - h], [m + h]; direction = :x, color = col, linewidth = 1.0, whiskerwidth = 0)
+                scatter!(ax, [m], [i]; marker = :circle, markersize = 4.5, color = filled ? col : :white,
+                         strokecolor = col, strokewidth = 0.9)
+            end
+        end
+        ylims!(ax, ny + 0.6, 0.05)
+        # Each panel keeps its own km scale, but x = 0 sits at the SAME fraction of the width in
+        # both (pursuer: 3.6 / 5.35), so the two minimax lines line up vertically.
+        xlims!(ax, k == 1 ? (-2.45, -2.45 + 2.45 * 5.35 / 3.6) : (-3.6, 1.75))
+    end
+    Legend(fig[0, 1],
+           [MarkerElement(marker = :circle, color = C_ALL, strokecolor = C_ALL, markersize = 5),
+            MarkerElement(marker = :circle, color = :white, strokecolor = C_TB, strokewidth = 0.9, markersize = 5)],
+           ["All opponents", "vs. type-based opponent"]; orientation = :horizontal, tellheight = true)
+    Label(fig[3, 1], "Advantage over minimax [km]  (right = better)"; fontsize = 7, tellwidth = false)
+    rowgap!(fig.layout, 3)
+    savefig(fig, "fig_summary")
+end
+
 # ---------------------------------------------------------------- F3 boxplot
+"Per-game mean separation over steps a..b, one value per trial."
+win_games(p1, p2, a, b) = [mean(r) for r in eachrow(T[(p1, p2)].step_sep[:, a:b])]
+
 function fig_boxplot()
-    println("\nF3 — per-game mean separation by strategy (pooled over the 5 opponents)")
-    fig = Figure(size = (COL1, 250))
+    # Per-game separation by strategy, pooled over all opponents, for the two post-approach
+    # 5-step windows of the heatmap (6-10, 26-30), dodged side by side, on a LOG y-axis
+    # (the type-based pursuer's lock-on games sit near 0.1-0.3 km, the rest at 2-10 km).
+    # Steps 1-5 are left out: the approach from ≈36 km would stretch the axis to 30 km.
+    WINB = WIN5[2:end]
+    WCOL = ["#f39b72", "#c94f1e"]
+    println("\nF3 — per-game mean separation by strategy and 5-step window (pooled over the $NST opponents)")
+    fig = Figure(size = (COL1, 250), fonts = LATEX_FONTS)
     for (row, role) in enumerate(("Evader", "Pursuer"))
         ax = Axis(fig[row, 1]; ylabel = "Separation [km]", title = "($(('a','b')[row])) $role strategy",
-                  xticks = (1:5, [LABEL[s] for s in STRATS]))
-        for (w, S) in enumerate(WINDOWS)
+                  xticks = (1:NST, [LABEL[s] for s in STRATS]), xticklabelrotation = π / 6,
+                  yscale = log10, yticks = [0.1, 0.3, 1, 3, 10], yminorticksvisible = false)
+        for (w, (a, b)) in enumerate(WINB)
             xs, ys = Float64[], Float64[]
             for (i, s) in enumerate(STRATS)
-                v = role == "Evader" ? vcat((T[(s, o)].win[S] for o in STRATS)...) :
-                                       vcat((T[(o, s)].win[S] for o in STRATS)...)
+                v = role == "Evader" ? vcat((win_games(s, o, a, b) for o in STRATS)...) :
+                                       vcat((win_games(o, s, a, b) for o in STRATS)...)
                 append!(xs, fill(i, length(v))); append!(ys, v)
-                S == 30 && @printf("  %-7s %-10s S=30  median %.2f  mean %.2f  (n=%d)\n", role, s, median(v), mean(v), length(v))
+                @printf("  %-7s %-11s s=%2d-%-2d  median %5.2f  mean %5.2f  (n=%d)\n",
+                        role, s, a, b, median(v), mean(v), length(v))
             end
-            boxplot!(ax, xs, ys; dodge = fill(w, length(xs)), n_dodge = 3, color = WIN_C[w],
-                     width = 0.75, gap = 0.25, dodge_gap = 0.05, markersize = 1.5, whiskerwidth = 0.4, whiskerlinewidth = 0.6,
-                     strokewidth = 0.4, strokecolor = INK, mediancolor = :white, medianlinewidth = 0.8,
-                     outliercolor = (MUTED, 0.5))
+            @printf("    min over games %.2e km; %d of %d games below the 0.05 km axis floor\n",
+                    minimum(ys), count(<(0.05), ys), length(ys))
+            boxplot!(ax, xs, ys; dodge = fill(w, length(xs)), n_dodge = length(WINB), color = WCOL[w],
+                     width = 0.75, gap = 0.25, dodge_gap = 0.05, markersize = 1.5,
+                     whiskerwidth = 0.4, whiskerlinewidth = 0.6, strokewidth = 0.4, strokecolor = INK,
+                     mediancolor = :white, medianlinewidth = 0.8, outliercolor = (MUTED, 0.5))
         end
+        ylims!(ax, 0.05, 15)   # a few lock-on games average < 0.01 km; they sit below the floor
         row == 1 && hidexdecorations!(ax; grid = false, ticks = false)
     end
-    Legend(fig[0, 1], [PolyElement(color = c) for c in WIN_C], ["S = $S" for S in WINDOWS];
+    Legend(fig[0, 1], [PolyElement(color = c) for c in WCOL],
+           [rich(rich("s", font = :italic), " = $(a)–$(b)") for (a, b) in WINB];
            orientation = :horizontal, tellheight = true)
     rowgap!(fig.layout, 4)
     savefig(fig, "fig_boxplot")
@@ -176,9 +435,9 @@ function fig_dv()
     println("\nF4 — executed ΔV per player [m/s] vs mean separation [km], one point per matchup")
     fig = Figure(size = (COL1, 190))
     ax = Axis(fig[1, 1]; xlabel = "Total executed ΔV over 30 steps [m/s]", ylabel = "Mean separation [km]")
-    isfp(s) = startswith(s, "FP")
-    groups = [("Evader, FP", C_E, :circle, true), ("Evader, non-FP", C_E, :circle, false),
-              ("Pursuer, FP", C_P, :utriangle, true), ("Pursuer, non-FP", C_P, :utriangle, false)]
+    isfp(s) = startswith(s, "FP") || startswith(s, "Meta")      # the learners
+    groups = [("Evader, learner", C_E, :circle, true), ("Evader, non-learner", C_E, :circle, false),
+              ("Pursuer, learner", C_P, :utriangle, true), ("Pursuer, non-learner", C_P, :utriangle, false)]
     for (lab, col, mk, fp) in groups
         xs, ys = Float64[], Float64[]
         for a in STRATS, b in STRATS
@@ -345,7 +604,11 @@ function fig_game_step(; steps = (2, 5, 10), p1 = "mixed", p2 = "mixed", seed = 
 end
 
 # ---------------------------------------------------------------- run
+fig_summary()
 fig_heatmap()
+fig_heatmap_alltime()
+fig_heatmap_at()
+fig_heatmap_stacked()
 fig_boxplot()
 fig_dv()
 fig_price_of_safety()
