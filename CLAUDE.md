@@ -4,7 +4,7 @@ Guidance for Claude Code when working in this repository. When responding to pro
 
 ## Current state
 
-*Rewritten in place each session. Keep it short — results go in `LOG.md`, not here. Last updated: 2026-10-27.*
+*Rewritten in place each session. Keep it short — results go in `LOG.md`, not here. Last updated: 2026-10-29.*
 
 - **Goal:** submit to **ECC 2027 by Oct 31 2026** (PaperCept; review copy ≤ 8 pp, final ≤ 6 pp;
   ieeeconf, PDF ≤ 3 MB; CFP silent on blind review). Write for a **controls audience**.
@@ -15,10 +15,13 @@ Guidance for Claude Code when working in this repository. When responding to pro
   in `README.md` § Paper to-do.
 - **Review gaps G1–G3 are closed in the text.** G2 is handled by Proposition 1 plus a scope paragraph.
 - **Open defects:** D12 (deferred, off the hot path). D13 closed 2026-10-20 (FP learner type added).
-- **Type-based reasoning** (`Meta_greedy` with the FP type; 18-cell sweep in `test/results/n30/`,
-  `test/run_meta.jl`, `test/analyze_meta.jl`) is in the paper. It is the strongest pursuer
-  (column mean 3.84 km vs FP's 4.82). As evader it ties FP on separation but cuts soft capture
-  against an FP pursuer from 91% to 9%.
+- **The paper uses one 6×6 tournament** (5 Gate B strategies + type-based `Meta_greedy`;
+  `WITH_META=1 test/analyze_gate_b.jl`). **Paper metric = mean separation over steps 10–30**
+  (was 6–30 until 10-29; `LATE0` in `test/figures_paper.jl`, `test/analyze_late.jl`, LOG 10-29). Type-based is the strongest pursuer
+  (1.76 vs FP's 2.76 km) and best evader on average (3.82), but its evader lead over FP comes only
+  from the type-based-pursuer matchup. Meta-game equilibrium: minimax evader vs type-based pursuer.
+- **Figures** (`test/figures_paper.jl`, Lato font in `test/fonts/`) go to `figures/paper/`; the
+  author uploads them to Overleaf. Results figures: `fig_summary`, `fig_heatmap`, `fig_learning` (type-based pursuer by evader; (b) how much closer than minimax), `fig_dv_vs_sep`.
 - **Machine:** the **32-core Linux machine** has the full results in `test/results/`. Every number
   the paper uses comes from it. The 8-core Mac only has a subset.
 - **Repo:** last commit 8990f3d, working tree clean.
@@ -53,7 +56,7 @@ Guidance for Claude Code when working in this repository. When responding to pro
 - **LaTeX is not installed on either machine**, so page count and compile errors can only be
   checked where the author compiles. Say so rather than guess.
 - Figures: PDF, one ieeeconf column wide where possible. Keep the whole PDF ≤ 3 MB.
-- Every number in the paper must come from `LOG.md` with its interval, using one machine's
+- Every number in the paper must come from `LOG.md` (which records its interval), using one machine's
   run consistently (the 32-core run unless LOG says otherwise).
 - `Game_Theory_Space_ECC_2027/reviews/` holds the CDC 2026 reviews (3 reviewers + AE). The rest
   of the CDC folder was deleted 2026-10-18; it is still in git history (commit 66eadae). ECC
@@ -166,7 +169,8 @@ defect D1, which voided every CDC number. A test asserts the old pairing is expl
   where possible) — but **only against files made on the same machine**; the two machines
   differ in the 3rd–4th significant figure.
 - **Measure before trusting a written claim.** Several plan-era numbers did not reproduce.
-- **No number in a paper table without an interval**, and no claim from tiny samples.
+- No claim from tiny samples. The paper text and tables report point estimates without ±
+  (author's choice, 2026-10-28); claims must still be significant, with the intervals kept in LOG.
 - Julia 1.12.7, but `Manifest.toml` was resolved under 1.11.1 — any `Pkg.add` re-resolves it.
 - The branch is **`aamas`** (historical name), not `main`.
 - The Julia LSP's `UnusedBinding` warnings on NamedTuple fields are spurious.

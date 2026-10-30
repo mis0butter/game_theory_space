@@ -6,6 +6,357 @@ identifier), what was decided, what was measured, what is predicted for the next
 
 ---
 
+## 2026-10-29 — fig_belief relabelled (preview only; no new games)
+
+**Ran:** scratch `belief.jl`. Legend titled "Type-based pursuer's belief that the evader is:"; panel titles
+"<X> evader", with * marking evaders that are not in the library (FP-mixed, type-based). Data unchanged
+(pursuer = Meta_greedy in every panel; mean of `p2_state[k].strategy_belief` over 100 trials). Old render kept
+as `figures/paper/learning_gallery/belief_v1.png`.
+
+## 2026-10-29 — fig_learning back to two panels (author's choice, "option 1"; no new games)
+
+**Ran:** one-panel design reverted. `fig_learning()` is the two-panel version again, identical to
+`learning_gallery/v10_two_panel_gain` except panel (b) is retitled "(b) How much closer than a minimax
+pursuer". Numbers unchanged (gain over steps 10–30: MM +0.161, Gr +2.813, FPg +3.461, FPm +1.012).
+Then: legend titled "Evader:" (left title, 2 rows) so the lines read as evader types.
+Then: PAIR_SIZE widened 215 → 245 pt (height 212) and PAIR_TXT.legend 7 → 6.5 pt, so the titled legend fits one row; fig_summary and fig_learning re-rendered at the new size.
+Then: reverted to PAIR_SIZE 215 × 212 (author prefers the old aspect). Legend kept at 6.5 pt, one row, `tellwidth = false` + right-aligned so it extends left over the y-label column. Both figures re-rendered.
+
+## 2026-10-29 — fig_learning redrawn as one panel (author's choice, "option 2"; no new games)
+
+**Ran:** `fig_learning()` rewritten in `test/figures_paper.jl`: one panel at PAIR_SIZE; colour = evader
+(minimax, greedy, FP-greedy, FP-mixed); solid + 95% band = type-based pursuer, faint dashed = minimax
+pursuer on the same trials. The gap between a colour's two lines is the gain; the subtracted panel (b) is
+gone. The previous two-panel version is kept as `figures/paper/learning_gallery/v10_two_panel_gain.{png,pdf}`.
+
+**Measured (steps 10–30, TB vs MM pursuer):** minimax evader 2.83 vs 3.00 (gap 0.16); greedy 0.21 vs 3.03
+(2.81); FP-greedy 0.29 vs 3.76 (3.46); FP-mixed 2.46 vs 3.47 (1.01). Same as the 10-29 block above.
+
+## 2026-10-29 — paper metric moved to steps 10–30 (author's request; 32-core, no new games)
+
+**Ran:** `test/analyze_late.jl` (window list now 1–30, 6–30, 10–30, 15–30; output in scratch `late_10.txt`)
+and `FIG_OUTDIR=figures/paper test/figures_paper.jl` with `LATE0` now read from ENV, default **10**
+(`LATE0=6` reproduces the old figures). CRN verified across all cells. Value check: the 6–30 numbers
+reproduce LOG 10-28 exactly (FPg − MM evader vs MM +0.784, vs FPg −0.382; TB − MM evader vs FPg −0.208).
+
+**Measured, steps 10–30 (± 95% CI):**
+- 6×6 table (rows evader Gr/MM/Rnd/FPg/FPm/TB; cols pursuer same order; avg):
+  Gr 3.77 3.03 4.56 3.32 3.50 0.21 | 3.07 ± .12; MM 3.09 3.00 4.84 2.88 3.59 2.83 | 3.37 ± .07;
+  Rnd 2.63 2.92 4.45 2.56 3.33 2.43 | 3.05 ± .06; FPg 3.06 3.76 7.04 2.43 4.23 0.29 | 3.47 ± .17;
+  FPm 2.87 3.47 5.75 2.79 3.92 2.46 | 3.54 ± .10; TB 2.87 3.67 7.16 2.61 4.29 2.30 | 3.82 ± .14;
+  pursuer avg 3.05 3.31 5.63 2.76 3.81 1.76 (± .03–.12). Cell CIs .02–.21.
+- Meta-game: pure MM evader vs TB pursuer, 2.834 km; TB pursuer weakly dominant.
+- FPg − MM evader by pursuer: Gr −0.04 ± .10 (ns), MM +0.76 ± .11, Rnd +2.20 ± .27, FPg −0.45 ± .06,
+  FPm +0.64 ± .16, TB −2.54 ± .04; pooled +0.09 ± .13 (ns).
+- Advantage over MM, pooled | vs TB: evader TB +0.45 ± .10 | −0.53; FPg +0.09 | −2.54; FPm +0.17 | −0.37;
+  Gr −0.31 | −2.62; Rnd −0.32 | −0.41. Pursuer TB +1.55 ± .10 | +1.37; FPg +0.54 | +1.07; FPm −0.50 | −0.62;
+  Gr +0.26 | +0.80; Rnd −2.32 | −3.49.
+- TB − FPg evader: six pursuers +0.35 ± .08; five (no TB) +0.02 ± .06 (ns). TB − FPg pursuer −1.01 ± .10.
+- TB pursuer − MM pursuer by evader: Gr −2.81, MM −0.16 ± .07, Rnd −0.50, FPg −3.46, FPm −1.01, TB −1.37.
+  TB − FPg pursuer vs FPg evader −2.13 ± .05.
+- TB − MM evader by pursuer: Gr −0.22 ± .11, MM +0.68, Rnd +2.32, FPg −0.27 ± .05, FPm +0.70, TB −0.53.
+- vs TB pursuer, MM evader leads TB +0.53 ± .08, Rnd +0.41 ± .05. Self-play TB 2.30, FPg 2.43, MM 3.00.
+- Price of safety: MM − oracle 3.64–3.74 km; FPg recovers 99.8–100.0%, TB 99.8–100.0%. vs MM evader:
+  oracle − MM pursuer +0.14 ± .08 (3.14 vs 3.00), FPg 2.88, TB 2.83.
+- FPg − MM evader vs MM pursuer by M: 6 +0.76, 12 +0.93, 24 +1.03.
+- Robustness: 15–30 gives the same evader and pursuer rankings and no significant sign flips.
+
+**Decided:** all metric figures regenerated at 10–30 in `figures/paper/` (summary, dv_vs_sep, learning
+printout). Heatmap / boxplot / price-of-safety use their own step windows and are unchanged.
+Capture and ΔV are whole-game and unchanged.
+
+## 2026-10-29 — fig_heatmap_values (no new games)
+
+**Ran:** `fig_heatmap(values = true)` (new keyword in `test/figures_paper.jl`; also added to the run block) →
+`figures/paper/fig_heatmap_values.{pdf,png}`. Same layout and colours as `fig_heatmap`, with each cell's
+mean separation over the 5-step window printed in it (`%.1f`, 5.5 pt; white on the darker half of the ramp).
+`fig_heatmap` itself is unchanged. **Measured:** same numbers as the F2 printout; e.g. type-based pursuer vs
+FP-greedy / greedy evader 0.5 / 0.6 km at steps 6–10 and 0.3 / 0.3 at 26–30.
+
+## 2026-10-29 — belief spread across trials (32-core, no new games)
+
+**Ran:** scratch `belief_spread.jl` on the existing type-based-pursuer cells (100 trials each).
+It reads `p2_state[k].strategy_belief` for the true type (random for FP-mixed and type-based evaders).
+
+**Measured:** true-type posterior, mean [p10 / median / p90] across trials:
+- minimax: k2 .47 [.13/.35/.87], k5 .95 [.90/.98/1.00], k10 .99 [.99/1/1]
+- greedy: k2 .63 [.43/.66/.81], k5 .97 [.92/.98/.99], k10 1.00
+- FP-greedy: k2 .92 [.83/.97/.97], k5 1.00
+- random: k2 .68 [.03/.99/.99], k5 .94 [1/1/1] (sd .21), k10 .98 (sd .12)
+- FP-mixed→random: k2 .61 [.02/.99/.99], k5 .95, k10 1.00
+- type-based→random: k2 .45 [.02/.19/.99], k5 .70 [.02/.99/1], k10 .84 [.30/1/1], k30 .95 (sd .22)
+
+**Decided:** the belief is a categorical posterior, so it has no covariance. The trial-to-trial
+spread is mostly all-or-nothing (bimodal) for random-like evaders, so the mean line understates how
+fast most trials lock on. Mean ± sd would not be meaningful here; if bands are drawn, use p10–p90.
+
+**Predicted:** n/a (no new run planned).
+
+**Then:** `fig_belief` preview redrawn with a shaded p10–p90 band (across 100 trials) on the true-type line in each panel. Where most trials sit at 1.0 and a few lag, the mean line falls outside the band (bimodal); the caption must say the band is a percentile range, not a CI.
+
+**Then:** band dropped at the author's request (confusing when the mean sits outside it). `fig_belief` is back to mean lines only; spread stays in this LOG block.
+
+**Then (saturation check, scratch `belief_sat.jl`):** share of trials whose largest posterior entry is exactly 1.0 in Float64, and median 1 − max, at steps 3/5/10/30:
+- minimax 0/0/0/0% (9e-2, 2e-2, 2e-4, 6e-11); greedy 0/0/0/100%; FP-greedy 0/0/0/100%
+- random 0/0/16/95% (2e-2, 1e-5, 5e-12, 0); FP-mixed 0/0/3/94%; type-based 0/0/0/25% (4e-2, 2e-3, 1e-4, 1e-12)
+
+The 1e-4 floor is on the *likelihood*, not the posterior: each contradicting step multiplies a wrong type by 1e-4, so after about four contradictions it drops below Float64 resolution and the posterior on the true type reads exactly 1.0. **Correction:** the earlier chat claim "90% of trials place belief 1.0 by step 3" was wrong; at step 3 the median is about 0.98. **Recommended (author to decide):** no rerun before ECC (it would change every type-based number). A posterior floor (fixed-share mixing with uniform) is noted as a limitation / future work.
+
+## 2026-10-28 (night, belief) — type-based pursuer's posterior over types, by true evader (figure only)
+
+**Ran.** Scratch `belief.jl` → `figures/paper/fig_belief` (preview, not in the paper). Mean over 100
+trials of the TB pursuer's `strategy_belief` (p2_state), step 0 = uniform prior over 10 types; the six
+fixed-vertex types summed. 32-core. **Measured** (posterior on the true type at steps 1/2/5/10/30):
+MM .20/.47/.95/.99/1.00; Gr .37/.63/.97/1.00/1.00; FPg .43/.92/1.00/1.00/1.00; Rnd .12/.68/.94/.98/1.00.
+Out of library: FPm → random .61/.95/1.00 at steps 2/5/10; TB evader → random .45/.70/.84/.95 at steps
+2/5/10/30, with minimax .13–.17 through step 10 (FP-greedy peaks .25 at step 2). **Predicted.** Nothing.
+
+---
+
+## 2026-10-28 (night, chosen) — fig_learning final: type-based pursuer by evader (figure only)
+
+**Decided (author).** `fig_learning` = gallery v4 without the thin baseline lines, now in
+`test/figures_paper.jl` F6. (a) TB pursuer separation vs MM / Gr / FPg / FPm evaders; (b) paired gain
+over a minimax pursuer on the same evader. Steps 6–30: sep 2.84 / 0.29 / 0.33 / 2.49; gain +0.152 /
++2.731 / +3.451 / +0.982 (= table and LOG 10-28 late). Gain at step 5: +0.17 / +0.76 / +2.75 / +0.93;
+at step 8: +0.07 / +2.56 / +3.66 / +0.92. Gallery files stay in `figures/paper/learning_gallery/`
+(not for the paper). Then: `fig_summary` and `fig_learning` both set to exactly 215 × 235 pt, fig_summary's
+original canvas (`PAIR_SIZE`, saved uncropped so the size is exact; a brief 240 × 200 version was reverted), then 10% shorter: 215 × 212 pt.
+Shared text sizes (`PAIR_TXT`: ticks/labels/legend 7, titles 8) and the same row layout (legend on top,
+two panels, bottom label) so the pair's axes line up side by side; tick marks removed from `fig_learning`. **Predicted.** Nothing.
+
+---
+
+## 2026-10-28 (night, gallery 4) — candidate v0b: TB pursuer by evader / MM evader by pursuer (figure only)
+
+**Ran.** Scratch `simple2.jl` → `learning_gallery/v0b_TBP_MME`. Raw separation only. Steps 6–30 (= table):
+TB P vs MM / FPm / Gr / FPg E 2.84 / 2.49 / 0.29 / 0.33; MM E vs MM / Gr / FPg / TB P 2.99 / 3.10 / 2.88 /
+2.84. **Predicted.** Nothing.
+
+---
+
+## 2026-10-28 (night, gallery 3) — simple fig_learning candidate v0: raw separation only (figure only)
+
+**Ran.** Scratch `simple.jl` → `figures/paper/learning_gallery/v0_simple`. Two panels, no deltas:
+(a) FPg evader, (b) MM evader, each vs MM / FPg / TB pursuers. Steps 6–30 means (= table): FPg E
+3.78 / 2.50 / 0.33; MM E 2.99 / 2.88 / 2.84. **Predicted.** Nothing.
+
+---
+
+## 2026-10-28 (night, gallery 2) — gallery v9 replaced: minimax evader by pursuer (figure only)
+
+**Changed.** `v9_MMP_by_evader` → `v9_MME_by_pursuer`: minimax evader vs TB / FPg / Gr / FPm pursuers,
+bottom = gain over a minimax pursuer (steps 6–30): TB +0.152, FPg +0.111, Gr −0.103, FPm −0.588
+(random pursuer omitted, −1.87). Top-panel titles shortened to the player name. Then (author) v9 bottom
+flipped to top − gray baseline (evader's view; same magnitudes, opposite sign). **Predicted.** Nothing.
+
+---
+
+## 2026-10-28 (night, gallery) — nine fig_learning candidates for the author to choose from (figures only)
+
+**Ran.** Scratch `gallery.jl` → `figures/paper/learning_gallery/v1..v9` (+ `_contact_sheet.png`). Each:
+top = per-step mean separation (95% band), bottom = paired gain over the minimax player in the same
+role. v1–v5 focal learner by opponent (FPg E, TB E, FPm E, TB P, FPg P; thin lines = same matchup with
+minimax in the focal role); v6–v9 one fixed opponent, players compared against it (FPg E chased; TB /
+FPg / MM pursuer fled; one gray minimax baseline). All steps 6–30 means match the 6×6 table. New gains
+not logged before: TB E vs Gr / FPg P −0.149 / −0.208; FPm E vs MM / FPg / TB P +0.473 / −0.058 /
+−0.356; FPg P vs Gr / TB E −0.275 / +0.997; Gr P vs FPg E +0.739; Rnd E vs MM P −0.067 (gain vs MM).
+No intervals computed here (bands are drawn). **Predicted.** Nothing.
+
+---
+
+## 2026-10-28 (night, final+++) — fig_learning simplified (figure only)
+
+**Changed.** Both panels now follow the FP-greedy evader; no legends, direct labels. (a) FPg − MM
+evader vs MM / FPg / TB pursuers (unchanged lines). (b) MM − TB and MM − FPg pursuer separation vs the
+FPg evader (+3.451, +1.276 over steps 6–30). Dropped from (b): TB vs greedy and vs minimax evaders
+(their numbers stay in the table/LOG). Values unchanged from the blocks below. **Predicted.** Nothing.
+
+---
+
+## 2026-10-28 (night, final++) — fig_learning (b): FP-mixed line swapped for FP-greedy pursuer (figure only)
+
+**Changed.** Panel (b) now: minimax − learning pursuer separation for TB vs FPg / Gr / MM evaders and
+FPg pursuer vs FPg evader (gray). New line, MM − FPg pursuer vs FPg evader: +0.23 (step 3), +0.78 (5),
++1.00 (8), +1.24 (10), +1.53 (20), +1.41 (30); steps 6–30 mean **+1.276** (= 3.78 − 2.50, table).
+TB on the same evader +3.451, so TB − FPg pursuer = 2.17 km (matches LOG 10-28 late). FPg v FPg
+oscillation (spike step 7, dip step 9) appears in both panels, as it is the same cell. **Predicted.** Nothing.
+
+---
+
+## 2026-10-28 (night, final+) — fig_learning reinstated with new pairings (figure only)
+
+**Decided (author).** `fig_learning` is back (reverses the night cut). New content (`figures_paper.jl`
+F6): (a) FP-greedy − minimax evader vs MM / FPg / TB pursuers; (b) minimax − type-based pursuer vs
+FPg / Gr / FPm / MM evaders; per-step paired gaps, up = learner better, 95% bands. Printed values
+match the block below; steps 6–30 means +0.784 / −0.382 / −2.514 and +3.451 / +2.731 / +0.982 / +0.152.
+**Predicted.** Nothing.
+
+---
+
+## 2026-10-28 (night, final) — per-step paired gaps for choosing fig_learning pairings (analysis only)
+
+**Ran.** Scratch `ts.jl`: per-step mean separation and paired differences, 16 cells, 32-core. No new games.
+**Measured** (paired, km; sign of 95% CI noted). Evader FPg − MM: vs MM pursuer +0.55 to +1.06 at every
+step (flat, all significant); vs FPg pursuer +0.65/+0.86 at steps 3–4, ≈0 at 5–8, −0.40 at step 10,
+−0.80 at step 30 (reversal); vs TB pursuer +0.26 at step 3, −1.92 at step 5, ≈−2.5 from step 8 (collapse).
+Pursuer TB − MM: vs FPg evader −0.43 (step 3) → −2.75 (5) → −3.66 (8), flat after; vs Gr evader +0.24 (3)
+→ −1.58 (6) → −2.56 (8), flat after (slower identification); vs FPm −0.6 to −1.1 from step 4; vs MM
+evader ≈0 at every step except step 25 (−0.47). Evader TB − MM vs FPg / Gr / TB pursuers: positive at
+steps 3–6, negative from about step 12–15. Single-step values are noisy (e.g. FPg v FPg step 7 +1.10).
+**Predicted.** Nothing.
+
+---
+
+## 2026-10-28 (night, last) — heatmap window ranges for the results text (analysis only)
+
+**Ran.** Scratch `hm.jl`: mean separation per 5-step window, 6×6 minus the random pursuer, 32-core.
+**Measured.** Steps 1–5: 14.40–15.85 km in every matchup. Steps 6–10: 2.45–4.38 km except TB
+pursuer vs FPg / Gr evaders 0.46 / 0.59. Steps 26–30: 2.21–4.33 km except TB vs FPg / Gr 0.30 /
+0.25. No intervals (cell means). **Predicted.** Nothing.
+
+---
+
+## 2026-10-28 (night, later) — executed ΔV: learning evaders save fuel (analysis only)
+
+**Ran.** Scratch `dv.jl` over the 36 6×6 cells (ΔV = Σ‖Δv‖ of executed impulses over 30 steps,
+per player; separation over steps 6–30). 32-core machine. No new games.
+
+**Measured** (paired vs the minimax player, 95% CI over 600 games):
+- Evader ΔV pooled over six pursuers: MM 248.7 ± 1.0 m/s; **FPg 194.1 (−54.6 ± 3.3, t −32.7,
+  −22%)**; **TB 208.5 (−40.1 ± 5.1, t −15.3, −16%)**; FPm 222.9 (−25.8 ± 1.5, −10%); Gr −4.9 ±
+  3.1; Rnd +3.5 ± 1.4.
+- Per pursuer, FPg and TB evaders vs MM evader: vs MM / Rnd / FPm pursuers −75.5 to −99.5 m/s
+  while separation is +0.68 to +2.30 km (both better). TB evader spends **more** vs Gr (+34.8 ±
+  2.8) and FPg (+40.9 ± 2.8) pursuers — the capture-avoidance matchups. FPg evader vs TB pursuer
+  +1.4 ± 3.2 (null).
+- Pursuer ΔV pooled: MM 337.9; all others 8–18 m/s less (TB −17.7 ± 3.4).
+- Pursuer − evader ΔV, all 3,600 games: +99.7 ± 1.5 m/s; pursuer spends more in 36/36 cells.
+
+**Not tested.** Why learners save fuel (hypothesis: minimax resamples its target each step and
+reverses more often). Do not claim a mechanism.
+
+**Predicted.** Nothing.
+
+---
+
+## 2026-10-28 (night) — paper cuts: oracle / price-of-safety section and fig_learning (decision only)
+
+**Decided (author).** Cut from the paper: the Price of Safety subsection (fixed-vertex evaders,
+oracle) with `fig_price_of_safety`, and `fig_learning`. `fig_dv_vs_sep` stays. The CDC reviews
+never asked for an oracle benchmark. The price of safety is now stated from the tournament
+(steps 6–30): TB − MM pursuer −2.73 (greedy evader) and −3.45 km (FP-greedy evader); MM pursuer
+hard-captures those evaders in 4% and 7% of trials, TB in 100%. Separately, the author chose to
+report point estimates without ± in the paper text and tables (CLAUDE.md updated); LOG keeps the
+intervals. No runs.
+
+---
+
+## 2026-10-28 (late) — paper metric switched to mean separation over steps 6–30; all results recomputed (analysis only)
+
+**Decided (author).** The paper's separation metric is now the mean over **steps 6–30**, after
+the approach (≈36 → ≈4 km by step 4; heatmap window 1–5). Capture still uses all 30 steps
+(close passes do occur in step 5: 1,406 of 6,000 games dip below 1 km in steps 1–5, 27 below
+0.2 km). Steps 15–30 are the robustness check. Supersedes the "keep whole game" recommendation
+in the block below.
+
+**Ran.** New `test/analyze_late.jl` (windows 1–30 / 6–30 / 15–30; CRN verified over 61 cells:
+6×6, B6, oracle) and scratch `cap.jl` (6×6 capture). `figures_paper.jl`: `cell()` gains `late`
+(mean over s ≥ `LATE0` = 6); `fig_summary`, `fig_dv` use it; summary x-limits widened.
+Steps 1–30 output reproduces every logged whole-game number. 32-core machine. No new games.
+
+**Measured, steps 6–30** (paired, 95% CI; n = 100 per cell, 600 pooled):
+- 6×6 means [evader rows Gr/MM/Rnd/FPg/FPm/TB × pursuer cols same order]:
+  Gr 3.71 3.02 4.54 3.29 3.51 0.29 | MM 3.10 2.99 4.86 2.88 3.58 2.84 | Rnd 2.63 2.93 4.45 2.57
+  3.33 2.43 | FPg 3.04 3.78 7.05 2.50 4.26 0.33 | FPm 2.86 3.47 5.72 2.83 3.91 2.49 | TB 2.95 3.67
+  7.16 2.68 4.28 2.36. CI half-widths 0.02–0.18 per cell (whole game: 0.12–0.21; the approach
+  carried most of the IC variance), 0.03–0.17 for averages.
+- Evader averages: TB **3.85 ± 0.14**, FPm 3.54 ± 0.09, FPg 3.49 ± 0.17, MM 3.38 ± 0.07, Gr 3.06
+  ± 0.11, Rnd 3.06 ± 0.06. Pursuer averages: TB **1.79 ± 0.09**, FPg 2.79 ± 0.03, Gr 3.05 ± 0.03,
+  MM 3.31 ± 0.04, FPm 3.81 ± 0.05, Rnd 5.63 ± 0.11.
+- Meta-game: pure (MM evader, TB pursuer), value **2.842** (cert 3.2e-14); TB pursuer lowest in
+  every row.
+- FPg − MM evader by pursuer: Gr −0.058 ± 0.085 (null), MM **+0.784 ± 0.098** (t 15.7), Rnd
+  +2.189 ± 0.229, FPg **−0.382 ± 0.057** (t −13.2), FPm +0.679 ± 0.143, TB **−2.514 ± 0.039**
+  (t −125.6).
+- Advantage over MM, all opps | vs TB: evader TB +0.473 ± 0.092 | −0.479 ± 0.080; FPg +0.116 ±
+  0.125 (**now null**, t 1.8) | −2.514; FPm +0.168 ± 0.053 | −0.356 ± 0.049; Gr −0.316 ± 0.093 |
+  −2.554 ± 0.037; Rnd −0.320 ± 0.046 | −0.410 ± 0.048. Pursuer TB +1.520 ± 0.100 | +1.309 ±
+  0.107; FPg +0.517 ± 0.052 | +0.997 ± 0.085; FPm −0.502 ± 0.045 | −0.608 ± 0.120; Gr +0.262 ±
+  0.054 | +0.724 ± 0.106; Rnd −2.321 ± 0.094 | −3.489 ± 0.195.
+- TB − FPg evader: six +0.357 ± 0.075, five (no TB pursuer) +0.021 ± 0.053 (null). TB − FPg
+  pursuer (six) −1.003 ± 0.095.
+- TB − MM pursuer by evader: Gr −2.731 ± 0.065, MM −0.152 ± 0.065 (t −4.6), Rnd −0.495 ± 0.063,
+  FPg −3.451 ± 0.085, FPm −0.982 ± 0.084, TB −1.309 ± 0.107. TB − FPg pursuer vs FPg evader
+  −2.174 ± 0.043.
+- TB − MM evader by pursuer: Gr −0.149 ± 0.091 (**now significant**, t −3.2; null in whole game),
+  MM +0.678 ± 0.102, Rnd +2.300 ± 0.239, FPg −0.208 ± 0.047, FPm +0.698 ± 0.139, TB −0.479 ±
+  0.080. TB − FPg evader vs FPg pursuer +0.174 ± 0.053.
+- Self-play: TB/TB 2.36 ± 0.07, FPg/FPg 2.50 ± 0.04, MM/MM 2.99 ± 0.06.
+- Price of safety (B6): MM − oracle 3.62–3.69 km (t 89–108); FPg recovers 99.4–99.8%, TB
+  99.7–99.9%; oracle 0.10–0.18 km vs MM 3.73–3.84. Vs MM evader: oracle − MM **+0.148 ± 0.070**
+  (t 4.2), FPg − MM −0.111 ± 0.067, TB − MM −0.152 ± 0.065; means 3.14 / 2.99 / 2.88 / 2.84.
+- FPg − MM evader vs MM pursuer by vertex count: M = 6 +0.784 ± 0.098, 12 +0.944 ± 0.096,
+  24 +1.009 ± 0.085.
+- **Steps 15–30 robustness:** both role rankings, the meta-game equilibrium (value 2.818) and
+  every significant sign are unchanged; FPg − MM vs FPg pursuer −0.485 ± 0.074; TB − FPg evader
+  (five) −0.001 ± 0.069.
+- Capture, 6×6 (all 30 steps, Wilson): pooled over six pursuers, soft: MM evader 86.8% [83.9,
+  89.3], FPg 68.8% [65.0, 72.4], TB **36.5% [32.7, 40.4]**; hard: MM 2.7% [1.6, 4.3], FPg 22.3%
+  [19.2, 25.8], TB 3.3% [2.2, 5.1]. Hard capture is 100% for TB pursuer vs FPg and Gr, 18% [11.7,
+  26.7] for FPg/FPg, 3.7% [3.1, 4.4] pooled over the other 33 cells.
+- Out of library: MAP type is `random` in 90/100 (TB evader vs FPm) and 100/100 (TB pursuer vs
+  FPm) games — the "90–100%" claim holds for FP-mixed alone.
+
+**Predicted.** Nothing; no runs planned.
+
+---
+
+## 2026-10-28 (later) — does the opening approach flatten the 6×6 table? Steps 1–5 vs 6–30 (analysis only)
+
+**Ran.** Scratch `late.jl` over the 36 cells, per-step separation split into steps 1–5 and
+6–30. CRN verified. 32-core machine. No new games.
+
+**Measured.** Steps 1–5 average 14.7–17.4 km in every cell (the approach from ~36 km), so they
+add ~2 km to every whole-game entry. Paired advantage over minimax, whole game → steps 6–30:
+TB pursuer +1.329 ± 0.087 → **+1.520 ± 0.100**; FP-greedy pursuer +0.468 → +0.517 ± 0.052;
+TB evader +0.460 → +0.473 ± 0.092; FP-greedy evader +0.154 → +0.116 ± 0.125 (null in both);
+random pursuer −2.186 → −2.321. Ranking and signs unchanged. Steps 6–30 pursuer column means:
+Gr 3.05, MM 3.31, Rnd 5.63, FPg 2.79, FPm 3.81, TB 1.79; TB pursuer vs FPg / Gr evader 0.33 /
+0.29 km. Steps 1–5 alone already differ by strategy (TB evader +0.391 ± 0.068 over minimax).
+
+**Decided (recommended, author to confirm).** Keep whole-game means as the paper metric; the
+approach compresses ratios, not differences. Meta-game equilibrium on steps 6–30 not computed.
+
+**Predicted.** Nothing.
+
+---
+
+## 2026-10-28 — paper tables rebuilt for the 6×6 tournament; figures switched to Lato (analysis only)
+
+**Ran.** Scratch scripts (`tables.jl`, `tb2.jl`) over the 36 cells of `test/results/n30/`;
+CRN verified across all 36. `test/figures_paper.jl` re-run with `FIG_OUTDIR=figures/paper`.
+No new games. 32-core machine.
+
+**Measured** (paired over common ICs, 95% CI):
+- `tab:contrast` (FP-greedy − minimax evader) reproduces the 09-02 rows exactly; new row vs the
+  type-based pursuer **−2.176 ± 0.038 (t = −113.3)**.
+- `tab:types`: every cell and every bold mark reproduces the 10-20 table. Six-opponent averages:
+  pursuers minimax 5.27 ± 0.06, FP-greedy 4.81 ± 0.05, type-based 3.94 ± 0.09; evaders minimax
+  5.35 ± 0.08, FP-greedy 5.50 ± 0.16, type-based 5.81 ± 0.13.
+- Type-based − FP-greedy evader over all six pursuers: **+0.306 ± 0.065** (t = +9.2); over the
+  five non-type-based pursuers: **+0.012 ± 0.045** (null). The evader lead comes entirely from
+  the matchup against the type-based pursuer. Type-based − FP-mixed evader (six): +0.297 ± 0.059.
+- Type-based − FP-greedy pursuer over all six evaders: **−0.861 ± 0.081** (t = −20.7).
+
+**Decided.** All figures use Lato (OFL, shipped in `test/fonts/`); every PDF embeds only Lato.
+`fig_summary` (advantage over minimax, dumbbell) and the 5-step-window `fig_heatmap` are the
+two results figures; the boxplot is out of the paper. Legend "width ∝" reworded (Lato has no ∝).
+
+**Predicted.** Nothing; no runs planned.
+
+---
+
 ## 2026-10-27 — 6×6 tournament: type-based joins as the sixth strategy (analysis only)
 
 **Decided.** The paper presents one 6×6 tournament (5 Gate B strategies + `Meta_greedy`) instead

@@ -16,7 +16,7 @@
 #   F3  fig_boxplot          per-game separation by strategy, 5-step windows 1-5 / 6-10 / 26-30
 #   F4  fig_dv_vs_sep        executed ΔV vs separation per matchup (regenerates ΔV scatter)
 #   F5  fig_price_of_safety  separation vs step: oracle / FP / minimax pursuers (new)
-#   F6  fig_learning         separation vs step and paired FP − minimax gap (new)
+#   F6  fig_learning         type-based pursuer by evader: separation vs step, paired gain over minimax
 #
 # Truncating to a window S is exact, not an approximation: the game is causal
 # and nothing in a step depends on the total length, so the first S steps of a
@@ -38,6 +38,7 @@ const LABEL    = Dict("FP_greedy" => "FP-greedy", "FP_mixed" => "FP-mixed", "gre
                       "mixed" => "Minimax", "random" => "Random", "oracle" => "Oracle",
                       "Meta_greedy" => "Type-based")
 const WINDOWS  = [5, 10, 30]
+const LATE0    = parse(Int, get(ENV, "LATE0", "10"))   # paper metric: mean separation over steps LATE0..30 (after the approach; 6 before 10-29)
 const R_HARD   = 0.2
 const ROOT     = pkgdir(trajectory_optimization_game_theory)
 # The paper lives in Overleaf; FIG_OUTDIR redirects the PDFs away from the repo copy.
@@ -48,6 +49,10 @@ mkpath(OUTDIR); mkpath(PREVIEW)
 # ---------------------------------------------------------------- style
 # ieeeconf: 252 pt single column, 516 pt double. Fonts match the paper's Times.
 const COL1, COL2 = 252, 516
+# fig_summary and fig_learning share this exact page size (uncropped, so it stays exact)
+const PAIR_SIZE = (215, 212)   # fig_summary's original canvas, 10% shorter
+# Shared text sizes for the pair, so fonts match and the two layouts line up row for row.
+const PAIR_TXT = (; tick = 7, label = 7, title = 8, legend = 6.5, note = 6.5)
 
 # Reference categorical palette (dataviz skill, light mode), in its fixed order.
 # One color per strategy across EVERY figure; line style is the redundant cue so
@@ -60,18 +65,11 @@ const INK, MUTED = "#1a1a19", "#6b6a63"
 const BLUES = ["#cde2fb", "#9ec5f4", "#6da7ec", "#3987e5", "#256abf", "#184f95", "#0d366b"]
 const WIN_C = ["#86b6ef", "#2a78d6", "#104281"]  # ordinal window S = 5/10/30
 
-function pick_font()
-    # to_font never throws: an unknown name silently falls back, so check what resolved
-    for f in ("TeX Gyre Termes", "Nimbus Roman", "Times New Roman")
-        fam = CairoMakie.Makie.to_font(f).family_name
-        lowercase(fam) == lowercase(f) && return f
-    end
-    @warn "no Times-like font found; using Makie's default sans"
-    "TeX Gyre Heros"
-end
-const FONT = pick_font()
-# Computer Modern (Makie's bundled NewComputerModern), for figures styled to look like LaTeX.
-const LATEX_FONTS = (; (k => theme_latexfonts().fonts[k][] for k in (:regular, :bold, :italic, :bolditalic))...)
+# Every figure uses Lato (SIL Open Font License), shipped in test/fonts/ so the figures
+# rebuild identically on any machine; the PDFs embed it.
+const FONTDIR = joinpath(ROOT, "test", "fonts")
+const LATO_FONTS = (; regular = joinpath(FONTDIR, "Lato-Regular.ttf"), bold = joinpath(FONTDIR, "Lato-Bold.ttf"),
+                      italic = joinpath(FONTDIR, "Lato-Italic.ttf"), bolditalic = joinpath(FONTDIR, "Lato-BoldItalic.ttf"))
 title_S(S) = rich(rich("s", font = :italic), " = $S")   # AT step s (s is the step index)
 title_le(S) = rich(rich("s", font = :italic), " ≤ $S")  # steps 1..S
 title_rng(a, b) = rich(rich("s", font = :italic), " = $(a)–$(b)")   # steps a..b
@@ -82,7 +80,7 @@ at_step(a, b, S) = mean(T[(a, b)].step_sep[:, S])
 
 set_theme!(Theme(
     fontsize = 8, figure_padding = (2, 6, 2, 2),
-    fonts = (; regular = FONT, bold = FONT * " Bold", italic = FONT * " Italic"),
+    fonts = LATO_FONTS,
     textcolor = INK,
     Axis = (xgridvisible = false, ygridvisible = true, ygridcolor = (:black, 0.07),
             ygridwidth = 0.5, spinewidth = 0.6, xtickwidth = 0.6, ytickwidth = 0.6,
@@ -112,9 +110,9 @@ function crop_pdf!(path; pad = 1.0)
     mv(tmp, path; force = true)
 end
 
-function savefig(fig, name)
+function savefig(fig, name; crop = true)
     save(joinpath(OUTDIR, name * ".pdf"), fig; pt_per_unit = 1)
-    crop_pdf!(joinpath(OUTDIR, name * ".pdf"))
+    crop && crop_pdf!(joinpath(OUTDIR, name * ".pdf"))
     save(joinpath(PREVIEW, name * ".png"), fig; px_per_unit = 4)
     println("  wrote images/$name.pdf")
 end
@@ -127,6 +125,7 @@ function cell(p1, p2)
     gv = load_games_vec(NG, NS, p1, p2)
     step_sep = fill(NaN, length(gv), NS)
     win = Dict(S => Float64[] for S in WINDOWS)
+    late = Float64[]
     dv1, dv2 = Float64[], Float64[]
     for (gi, g) in enumerate(gv)
         s = separation_series(g)
@@ -136,10 +135,11 @@ function cell(p1, p2)
         for S in WINDOWS
             push!(win[S], mean(s.d[s.k .<= S]))
         end
+        push!(late, mean(s.d[s.k .>= LATE0]))
         push!(dv1, sum(sum(norm, eachrow(st.U_chosen)) for st in g.p1_state if !isempty(st.U_chosen)))
         push!(dv2, sum(sum(norm, eachrow(st.U_chosen)) for st in g.p2_state if !isempty(st.U_chosen)))
     end
-    (; step_sep, win, dv1, dv2)
+    (; step_sep, win, late, dv1, dv2)
 end
 
 println("Loading cells ...")
@@ -163,7 +163,7 @@ const RAMP_S = Dict(
 
 const WIN5 = [(1, 5), (6, 10), (26, 30)]   # trailing 5-step windows
 
-function fig_heatmap()
+function fig_heatmap(; values = false, name = values ? "fig_heatmap_values" : "fig_heatmap")
     # Mean separation over a trailing 5-STEP WINDOW (steps 1-5, 6-10, 26-30), averaged
     # over trials: unlike the running mean from step 1 (fig_heatmap_alltime), later panels
     # are not diluted by the opening approach. Pursuer on y, evader on x; per-panel
@@ -172,7 +172,7 @@ function fig_heatmap()
     PURS = filter(!=("random"), STRATS)
     NP = length(PURS)
     println("\nF2 — mean separation over 5-step windows [km], rows pursuer, cols evader")
-    fig = Figure(size = (COL2, 175), fonts = LATEX_FONTS)
+    fig = Figure(size = (COL2, 175), fonts = LATO_FONTS)
     Ms = Dict(w => [win_step(a, b, w...) for a in STRATS, b in PURS] for w in WIN5)   # [evader, pursuer]
     # The two post-approach windows (6-10, 26-30) cover nearly the same range, so they
     # share ONE range: equal km get equal depth in both, despite the different hues.
@@ -197,6 +197,13 @@ function fig_heatmap()
                   xlabel = "Evader", ylabel = i == 1 ? "Pursuer" : "",
                   yticklabelsvisible = i == 1, ygridvisible = false)   # left/bottom spines only
         hm = heatmap!(ax, 1:NST, 1:NP, M; colormap = cmap, colorrange = (lo, hi))
+        if values   # cell means printed in place; white ink on the darker half of the ramp
+            for r in 1:NST, c in 1:NP
+                t = (M[r, c] - lo) / (hi - lo)
+                text!(ax, r, c; text = @sprintf("%.1f", M[r, c]), align = (:center, :center), fontsize = 5.5,
+                      color = t < 0.5 * frac ? :white : INK)
+            end
+        end
         # one bar per panel for a balanced layout; the 6-10 and 26-30 bars are identical
         Colorbar(fig[1, 2i], hm; label = i == length(WIN5) ? "Mean separation [km]" : "",
                  width = 5, ticksize = 2, ticklabelsize = 6.5, labelsize = 7,
@@ -206,7 +213,7 @@ function fig_heatmap()
     for i in 1:length(WIN5)
         colgap!(fig.layout, 2i - 1, 3)
     end
-    savefig(fig, "fig_heatmap")
+    savefig(fig, name)
 end
 
 function fig_heatmap_alltime()
@@ -218,7 +225,7 @@ function fig_heatmap_alltime()
     PURS = filter(!=("random"), STRATS)
     NP = length(PURS)
     println("\nF2 — mean separation over steps 1..s [km], rows pursuer, cols evader (random pursuer omitted)")
-    fig = Figure(size = (COL2, 175), fonts = LATEX_FONTS)
+    fig = Figure(size = (COL2, 175), fonts = LATO_FONTS)
     Ms = Dict(S => [mean(T[(a, b)].win[S]) for a in STRATS, b in PURS] for S in WINDOWS)   # [evader, pursuer]
     span_max = maximum(-(reverse(extrema(M))...) for M in values(Ms))
     for (i, S) in enumerate(WINDOWS)
@@ -258,7 +265,7 @@ function fig_heatmap_at()
     PURS = filter(!=("random"), STRATS)
     NP = length(PURS)
     println("\nF2 — separation AT step s [km], rows pursuer, cols evader (random pursuer omitted)")
-    fig = Figure(size = (COL2, 175), fonts = LATEX_FONTS)
+    fig = Figure(size = (COL2, 175), fonts = LATO_FONTS)
     Ms = Dict(S => [at_step(a, b, S) for a in STRATS, b in PURS] for S in WINDOWS)   # [evader, pursuer]
     lo = minimum(minimum.(values(Ms))); hi = maximum(maximum.(values(Ms)))
     jm, im = findfirst(==("mixed"), PURS), findfirst(==("mixed"), STRATS)
@@ -307,7 +314,7 @@ function fig_heatmap_stacked()
     lo = minimum(minimum.(values(Ms))); hi = maximum(maximum.(values(Ms)))
     println("\nF2b — mean separation [km], stacked S = 10 / 30, rows pursuer, cols evader")
     @printf("  shared scale [%.2f, %.2f]\n", lo, hi)
-    fig = Figure(size = (COL1, 330), fonts = LATEX_FONTS)
+    fig = Figure(size = (COL1, 330), fonts = LATO_FONTS)
     local hm
     for (i, S) in enumerate((10, 30))
         M = Ms[S]
@@ -340,27 +347,27 @@ Whole-game mean separation (the metric the text quotes). Two dots per strategy: 
 pooled over all six opponents (600 pairs), hollow = against the type-based opponent (100);
 the two sit on the strategy's row, joined by a connector (dumbbell).
 """
-function fig_summary()
+function fig_summary(; fonts = LATO_FONTS, name = "fig_summary")
     M = "Meta_greedy"
     ROWS = ["Meta_greedy", "FP_greedy", "FP_mixed", "greedy", "random"]   # minimax is the 0 line
-    sep(e, p) = T[(e, p)].win[30]
+    sep(e, p) = T[(e, p)].late
     ci(d) = (mean(d), 1.96std(d) / sqrt(length(d)))
     adv(role, x, opps) = role == 1 ?
         vcat((sep(x, o) .- sep("mixed", o) for o in opps)...) :
         vcat((-(sep(o, x) .- sep(o, "mixed")) for o in opps)...)
     C_ALL, C_TB = "#2c4f85", "#c94f1e"
     println("\nF0 — advantage over minimax [km], paired 95% CI (right = better)")
-    fig = Figure(size = (215, 235), fonts = LATEX_FONTS)
+    fig = Figure(size = PAIR_SIZE, fonts = fonts)
     ny = length(ROWS)
     for (k, role) in enumerate(("Evader", "Pursuer"))
         ax = Axis(fig[k, 1]; title = "($(('a','b')[k])) As $(lowercase(role))",   # stacked: evader on top
                   yticks = (1:ny, [LABEL[r] for r in ROWS]), yreversed = true,
                   yticksvisible = false, ygridvisible = false,
                   xgridvisible = true, xgridcolor = (:black, 0.07), xticksvisible = false,
-                  yticklabelsize = 7, xticklabelsize = 7, titlesize = 8)   # labels below title size
+                  yticklabelsize = PAIR_TXT.tick, xticklabelsize = PAIR_TXT.tick, titlesize = PAIR_TXT.title)
         vlines!(ax, 0; color = MUTED, linewidth = 0.6)
         # minimax is the reference: its advantage over itself is 0 in every matchup
-        text!(ax, 0, 0.45; text = "Minimax", align = (:right, :bottom), offset = (-2, 0), fontsize = 6.5, color = MUTED)
+        text!(ax, 0, 0.45; text = "Minimax", align = (:right, :bottom), offset = (-2, 0), fontsize = PAIR_TXT.note, color = MUTED)
         for (i, x) in enumerate(ROWS)
             # dumbbell: both dots on the strategy's row, joined by a thin connector drawn first
             ests = [ci(adv(k, x, opps)) for opps in (STRATS, [M])]
@@ -373,18 +380,19 @@ function fig_summary()
                          strokecolor = col, strokewidth = 0.9)
             end
         end
-        ylims!(ax, ny + 0.6, 0.05)
+        ylims!(ax, ny + 0.6, -0.15)   # headroom for the "Minimax" label
         # Each panel keeps its own km scale, but x = 0 sits at the SAME fraction of the width in
-        # both (pursuer: 3.6 / 5.35), so the two minimax lines line up vertically.
-        xlims!(ax, k == 1 ? (-2.45, -2.45 + 2.45 * 5.35 / 3.6) : (-3.6, 1.75))
+        # both (pursuer: 3.8 / 5.55), so the two minimax lines line up vertically.
+        xlims!(ax, k == 1 ? (-2.75, -2.75 + 2.75 * 5.55 / 3.8) : (-3.8, 1.75))
     end
     Legend(fig[0, 1],
            [MarkerElement(marker = :circle, color = C_ALL, strokecolor = C_ALL, markersize = 5),
             MarkerElement(marker = :circle, color = :white, strokecolor = C_TB, strokewidth = 0.9, markersize = 5)],
-           ["All opponents", "vs. type-based opponent"]; orientation = :horizontal, tellheight = true)
-    Label(fig[3, 1], "Advantage over minimax [km]  (right = better)"; fontsize = 7, tellwidth = false)
+           ["All opponents", "vs. type-based opponent"]; orientation = :horizontal, tellheight = true,
+           labelsize = PAIR_TXT.legend)
+    Label(fig[3, 1], "Advantage over minimax [km]  (right = better)"; fontsize = PAIR_TXT.label, tellwidth = false)
     rowgap!(fig.layout, 3)
-    savefig(fig, "fig_summary")
+    savefig(fig, name; crop = false)
 end
 
 # ---------------------------------------------------------------- F3 boxplot
@@ -399,7 +407,7 @@ function fig_boxplot()
     WINB = WIN5[2:end]
     WCOL = ["#f39b72", "#c94f1e"]
     println("\nF3 — per-game mean separation by strategy and 5-step window (pooled over the $NST opponents)")
-    fig = Figure(size = (COL1, 250), fonts = LATEX_FONTS)
+    fig = Figure(size = (COL1, 250), fonts = LATO_FONTS)
     for (row, role) in enumerate(("Evader", "Pursuer"))
         ax = Axis(fig[row, 1]; ylabel = "Separation [km]", title = "($(('a','b')[row])) $role strategy",
                   xticks = (1:NST, [LABEL[s] for s in STRATS]), xticklabelrotation = π / 6,
@@ -434,7 +442,7 @@ end
 function fig_dv()
     println("\nF4 — executed ΔV per player [m/s] vs mean separation [km], one point per matchup")
     fig = Figure(size = (COL1, 190))
-    ax = Axis(fig[1, 1]; xlabel = "Total executed ΔV over 30 steps [m/s]", ylabel = "Mean separation [km]")
+    ax = Axis(fig[1, 1]; xlabel = "Total executed ΔV over 30 steps [m/s]", ylabel = "Mean separation, steps $(LATE0)–30 [km]")
     isfp(s) = startswith(s, "FP") || startswith(s, "Meta")      # the learners
     groups = [("Evader, learner", C_E, :circle, true), ("Evader, non-learner", C_E, :circle, false),
               ("Pursuer, learner", C_P, :utriangle, true), ("Pursuer, non-learner", C_P, :utriangle, false)]
@@ -443,7 +451,7 @@ function fig_dv()
         for a in STRATS, b in STRATS
             s, dv = startswith(lab, "Evader") ? (a, T[(a, b)].dv1) : (b, T[(a, b)].dv2)
             isfp(s) == fp || continue
-            push!(xs, 1e3mean(dv)); push!(ys, mean(T[(a, b)].win[30]))
+            push!(xs, 1e3mean(dv)); push!(ys, mean(T[(a, b)].late))
         end
         scatter!(ax, xs, ys; marker = mk, markersize = 6, color = fp ? col : :white,
                  strokecolor = col, strokewidth = 1.0, label = lab)
@@ -504,33 +512,43 @@ function fig_price_of_safety()
 end
 
 # ---------------------------------------------------------------- F6 learning vs minimax
+# The type-based pursuer against four evaders. (a) per-step mean separation; (b) its paired
+# per-step gain over a minimax pursuer on the same evader (CRN: row k pairs), up = closer.
 function fig_learning()
-    println("\nF6 — evader FP-greedy vs minimax, per step")
-    fig = Figure(size = (COL1, 250))
-    ax1 = Axis(fig[1, 1]; ylabel = "Separation [km]",
-               title = "(a) Mean separation (steps 1–3: approach from ≈36 km)")
-    ax2 = Axis(fig[2, 1]; ylabel = "FP − minimax [km]", xlabel = "Game step",
-               title = "(b) Paired gain of the FP-greedy evader")
-    for e in ("mixed", "FP_greedy"), p in ("mixed", "FP_greedy")
-        meanband!(ax1, T[(e, p)].step_sep, C[e]; ls = p == "mixed" ? :solid : :dash,
-              label = "$(LABEL[e]) E vs $(LABEL[p]) P")
+    println("\nF6 — type-based pursuer by evader (gain @ steps 3,5,8,10,20,30 | steps $(LATE0)–30)")
+    fig = Figure(size = PAIR_SIZE; figure_padding = (2, 8, 2, 2))
+    # Same row structure as fig_summary (legend, panel a, panel b, bottom label) so that, at the
+    # same canvas size, the two figures' axes line up when placed side by side.
+    z = PAIR_TXT
+    nt = (; xticksvisible = false, yticksvisible = false, xticklabelsize = z.tick, yticklabelsize = z.tick,
+          ylabelsize = z.label, titlesize = z.title)
+    ax1 = Axis(fig[1, 1]; ylabel = "Separation [km]", title = "(a) Type-based pursuer", nt...)
+    ax2 = Axis(fig[2, 1]; ylabel = "Gain [km]", title = "(b) How much closer than a minimax pursuer", nt...)
+    LSE = Dict("mixed" => :solid, "FP_greedy" => :dash, "greedy" => :dashdot, "FP_mixed" => :dashdotdot)
+    for e in ("mixed", "greedy", "FP_greedy", "FP_mixed")
+        meanband!(ax1, T[(e, "Meta_greedy")].step_sep, C[e]; ls = LSE[e], label = LABEL[e])
+        D = T[(e, "mixed")].step_sep .- T[(e, "Meta_greedy")].step_sep
+        m = meanband!(ax2, D, C[e]; ls = LSE[e])
+        @printf("  vs %-10s E: sep %.2f | gain %s | %+.3f\n", e, mean(T[(e, "Meta_greedy")].late),
+                join([@sprintf("%+5.2f", m[k]) for k in (3, 5, 8, 10, 20, 30)], " "),
+                mean(mean(D[:, LATE0:NS]; dims = 2)))
+    end
+    for ax in (ax1, ax2)
+        vspan!(ax, 1, 5; color = (:black, 0.05)); xlims!(ax, 1, NS)
+        ax.xticks = [1, 5, 10, 15, 20, 25, 30]
     end
     hlines!(ax2, 0; color = MUTED, linewidth = 0.6)
-    for p in ("mixed", "FP_greedy")
-        D = T[("FP_greedy", p)].step_sep .- T[("mixed", p)].step_sep   # CRN: row k pairs
-        m = meanband!(ax2, D, C[p]; ls = LS[p], label = "vs $(LABEL[p]) pursuer")
-        whole = mean(T[("FP_greedy", p)].win[30] .- T[("mixed", p)].win[30])
-        @printf("  vs %-10s pursuer: steps 1,5,10,20,30 %s   whole-game %+.3f\n", p,
-                join([@sprintf("%+6.3f", m[k]) for k in (1, 5, 10, 20, 30)], " "), whole)
-    end
-    for ax in (ax1, ax2); xlims!(ax, 1, NS); end
-    ylims!(ax1, 0, 6.5)
-    ylims!(ax2, -1.6, 2.3)
-    hidexdecorations!(ax1; grid = false, ticks = false)
-    Legend(fig[0, 1], ax1; orientation = :horizontal, nbanks = 2, tellheight = true)
-    axislegend(ax2; position = :lt, labelsize = 7, framevisible = false, padding = (2, 2, 0, 0))
-    rowgap!(fig.layout, 4)
-    savefig(fig, "fig_learning")
+    ylims!(ax1, 0, 5.5)
+    text!(ax1, 3.1, 0.15; text = "approach\n(≈36 km)", align = (:center, :bottom), fontsize = z.note - 0.5,
+          color = MUTED)
+    # tellwidth = false + right-aligned: the one-row legend runs left past the plot area, over the y-label column
+    Legend(fig[0, 1], ax1, "Evader:"; orientation = :horizontal, tellheight = true, tellwidth = false,
+           halign = :right, colgap = 4, padding = (0, 0, 0, 0), titlegap = 4,
+           patchsize = (11, 6), labelsize = z.legend, titleposition = :left, titlefont = :regular,
+           titlesize = z.legend)
+    Label(fig[3, 1], "Game step"; fontsize = z.label, tellwidth = false)
+    rowgap!(fig.layout, 3)
+    savefig(fig, "fig_learning"; crop = false)
 end
 
 # ---------------------------------------------------------------- F1 game step
@@ -597,7 +615,7 @@ function fig_game_step(; steps = (2, 5, 10), p1 = "mixed", p2 = "mixed", seed = 
            [LineElement(color = C_E, linewidth = 1.4), LineElement(color = C_P, linewidth = 1.4),
             LineElement(color = INK, linestyle = (:dash, :dense), linewidth = 1.2),
             LineElement(color = MUTED, linewidth = 0.7)],
-           ["Evader", "Pursuer", "Candidates (width ∝ Nash weight)", "Hexagon of targets"];
+           ["Evader", "Pursuer", "Candidates (thicker = higher Nash weight)", "Hexagon of targets"];
            orientation = :horizontal, tellheight = true)
     rowgap!(fig.layout, 0); colgap!(fig.layout, 0)
     savefig(fig, "fig_game_step")
@@ -606,6 +624,7 @@ end
 # ---------------------------------------------------------------- run
 fig_summary()
 fig_heatmap()
+fig_heatmap(values = true)
 fig_heatmap_alltime()
 fig_heatmap_at()
 fig_heatmap_stacked()
@@ -614,4 +633,4 @@ fig_dv()
 fig_price_of_safety()
 fig_learning()
 fig_game_step()
-println("\nfont: ", FONT)
+println("\nfont: Lato (", FONTDIR, ")")
